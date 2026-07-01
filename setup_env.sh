@@ -251,18 +251,37 @@ log_step "Step 3/5: Python Core Dependencies"
 
 # --- PyTorch (installed first to avoid pulling wrong version) ---
 log_info "检查 PyTorch..."
+NEED_TORCH_INSTALL=false
+
 if python -c "import torch; print(torch.__version__)" 2>/dev/null; then
-    log_info "PyTorch 已安装: $(python -c 'import torch; print(f\"v{torch.__version__} (CUDA={torch.cuda.is_available()})\")')"
-    log_info "跳过 PyTorch 安装"
+    TORCH_VER=$(python -c "import torch; print(torch.__version__)")
+    TORCH_CUDA=$(python -c "import torch; print(torch.cuda.is_available())")
+    log_info "PyTorch 已安装: v${TORCH_VER} (CUDA=${TORCH_CUDA})"
+
+    if $GPU_MODE; then
+        if [ "$TORCH_CUDA" = "True" ]; then
+            log_info "已有 CUDA 版本，跳过安装"
+        else
+            log_info "当前为 CPU 版本，需要重装 GPU 版本..."
+            NEED_TORCH_INSTALL=true
+        fi
+    else
+        log_info "跳过 PyTorch 安装"
+    fi
 else
+    NEED_TORCH_INSTALL=true
+fi
+
+if $NEED_TORCH_INSTALL; then
     log_info "安装 PyTorch (index: ${TORCH_INDEX})..."
-    pip install torch>=2.1.0 --index-url "$TORCH_INDEX" -q
+    pip install --force-reinstall torch --index-url "$TORCH_INDEX" -q
 fi
 
 if $GPU_MODE; then
     log_info "验证 CUDA 可用性..."
     if python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'" 2>/dev/null; then
-        log_info "PyTorch CUDA: OK ($(python -c 'import torch; print(torch.cuda.get_device_name(0))'))"
+        GPU_NAME=$(python -c "import torch; print(torch.cuda.get_device_name(0))")
+        log_info "PyTorch CUDA: OK (${GPU_NAME})"
     else
         log_error "PyTorch 报告 CUDA 不可用！检查 driver/CUDA 兼容性。"
         log_error "  Driver CUDA: ${CUDA_VER}, PyTorch index: ${CUDA_INDEX}"
@@ -421,21 +440,23 @@ if $GPU_MODE; then
 import torch
 if torch.cuda.is_available():
     name = torch.cuda.get_device_name(0)
-    mem  = torch.cuda.get_device_properties(0).total_mem / 1024**3
+    mem  = torch.cuda.get_device_properties(0).total_memory / 1024**3
     cuda = torch.version.cuda
-    print(f'  ✓ {name}')
-    print(f'  ✓ VRAM: {mem:.1f} GB')
-    print(f'  ✓ CUDA: {cuda} (PyTorch)')
+    print(f'  \u2713 {name}')
+    print(f'  \u2713 VRAM: {mem:.1f} GB')
+    print(f'  \u2713 CUDA: {cuda} (PyTorch)')
 else:
-    print('  ✗ CUDA 不可用')
-" 2>/dev/null
+    print('  \u2717 CUDA 不可用')
+" 2>&1
 fi
 
 # ROS2 check
 if [ -n "$ROS2_SOURCE" ]; then
     echo ""
     echo "ROS2 状态:"
+    set +euo pipefail
     source "$ROS2_SOURCE" 2>/dev/null || true
+    set -euo pipefail
     if command -v ros2 &> /dev/null; then
         echo -e "  ${GREEN}✓${NC} ROS2 CLI (${ROS2_DISTRO})"
         echo -e "  ${GREEN}✓${NC} colcon build"

@@ -20,10 +20,10 @@ source .venv/bin/activate
 
 ```bash
 # 有桌面 — 交互式拖拽滑块
-python -m mujoco.viewer --mjcf=simulation/electronbot_mujoco/electronbot_mujoco/assets/electronbot_inline.xml
+python3 -m mujoco.viewer --mjcf=simulation/electronbot_mujoco/electronbot_mujoco/assets/electronbot_inline.xml
 
 # 无桌面 (SSH/服务器) — 加 EGL 前缀
-MUJOCO_GL=egl python -m mujoco.viewer --mjcf=simulation/electronbot_mujoco/electronbot_mujoco/assets/electronbot_inline.xml
+MUJOCO_GL=egl python3 -m mujoco.viewer --mjcf=simulation/electronbot_mujoco/electronbot_mujoco/assets/electronbot_inline.xml
 ```
 
 > 训练时用 `scene.xml`（几何基元，~2000 fps），比 inline 版快 4 倍。
@@ -31,7 +31,7 @@ MUJOCO_GL=egl python -m mujoco.viewer --mjcf=simulation/electronbot_mujoco/elect
 ### 1.4 一键验证
 
 ```bash
-python simulation/electronbot_mujoco/scripts/test_env.py --test all
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test all
 ```
 
 预期：7 项中 5 项 `[OK]`。
@@ -39,13 +39,13 @@ python simulation/electronbot_mujoco/scripts/test_env.py --test all
 ### 1.5 快速调试
 
 ```bash
-source .venv/bin/activate && python -c "import mujoco,torch,gymnasium;print('OK')"
+source .venv/bin/activate && python3 -c "import mujoco,torch,gymnasium;print('OK')"
 
-python -c "import mujoco;m=mujoco.MjModel.from_xml_path('simulation/electronbot_mujoco/electronbot_mujoco/assets/electronbot_inline.xml');print(m.ngeom)"
+python3 -c "import mujoco;m=mujoco.MjModel.from_xml_path('simulation/electronbot_mujoco/electronbot_mujoco/assets/electronbot_inline.xml');print(m.ngeom)"
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test mapping
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test mapping
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test protocol
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test protocol
 ```
 
 ---
@@ -78,37 +78,37 @@ bash setup_env.sh --gpu --full --skip-ros
 ### 3.1 仿真测试
 
 ```bash
-python simulation/electronbot_mujoco/scripts/test_env.py --test all
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test all
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test mapping
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test mapping
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test firmware
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test firmware
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test i2c
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test i2c
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test protocol
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test protocol
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test servo
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test servo
 
-python simulation/electronbot_mujoco/scripts/test_env.py --test disturbance
+python3 simulation/electronbot_mujoco/scripts/test_env.py --test disturbance
 ```
 
 ### 3.2 AI 训练
 
 ```bash
-python ai/rl/electronbot_rl/train_ppo.py --task reach --timesteps 100000
+python3 ai/rl/electronbot_rl/train_ppo.py --task reach --timesteps 100000
 
-python ai/rl/electronbot_rl/train_ppo.py --task wave --emotion excited
+python3 ai/rl/electronbot_rl/train_ppo.py --task wave --emotion excited
 
-python ai/rl/electronbot_rl/train_sac.py --task push --timesteps 100000
+python3 ai/rl/electronbot_rl/train_sac.py --task push --timesteps 100000
 
-python ai/il/scripts/collect_demo.py --output demos.h5 --episodes 50
+python3 ai/il/scripts/collect_demo.py --output demos.h5 --episodes 50
 
-python ai/il/electronbot_il/act/train.py --data demos.h5 --epochs 500
+python3 ai/il/electronbot_il/act/train.py --data demos.h5 --epochs 500
 
-python ai/il/electronbot_il/diffusion/train.py --data demos.h5 --epochs 1000
+python3 ai/il/electronbot_il/diffusion/train.py --data demos.h5 --epochs 1000
 
-python ai/rl/electronbot_rl/inference.py --checkpoint checkpoints/ppo_reach.zip --record
+python3 ai/rl/electronbot_rl/inference.py --checkpoint checkpoints/ppo_reach.zip --record
 ```
 
 ### 3.3 VLA 部署
@@ -138,13 +138,13 @@ ros2 topic list
 ### 3.5 其他
 
 ```bash
-python behavior/electronbot_behavior/behavior_tree.py
+python3 behavior/electronbot_behavior/behavior_tree.py
 
-python benchmark/electronbot_benchmark/evaluator.py --task all
+python3 benchmark/electronbot_benchmark/evaluator.py --task all
 
-python sim2real/electronbot_sim2real/system_id.py
+python3 sim2real/electronbot_sim2real/system_id.py
 
-python sim2real/electronbot_real/calibration.py
+python3 sim2real/electronbot_real/calibration.py
 ```
 
 ---
