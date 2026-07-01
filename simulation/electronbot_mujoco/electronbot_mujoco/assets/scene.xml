@@ -1,0 +1,19 @@
+<!--
+  ElectronBot MuJoCo 场景文件
+  包含: 地面、光照、渲染相机配置
+-->
+<mujoco model="electronbot_scene">
+  <include file="electronbot.xml"/>
+
+  <visual>
+    <headlight ambient="0.3 0.3 0.3" diffuse="0.6 0.6 0.6"
+               specular="0.2 0.2 0.2"/>
+    <map fogstart="5" fogend="10" znear="0.001" zfar="50"/>
+    <quality shadowsize="2048" offsamples="4"/>
+  </visual>
+
+  <statistic center="0 0 0.15" extent="0.3"/>
+
+  <!-- 渲染用离线相机 (在 viewer 中可切换) -->
+  <!-- D435 仿真相机已在 electronbot.xml 中通过 d435_camera 定义 -->
+</mujoco>

@@ -1,0 +1,195 @@
+# ============================================================
+# ElectronBot_SIM .gitignore
+# 排除中间文件、环境文件、大文件和敏感配置
+# ============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# ============================================================
+# IDE & Editor
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+*.workspace
+*.sublime-workspace
+*.sublime-project
+
+# ============================================================
+# OS Files
+# ============================================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.bak
+*.tmp
+*.temp
+
+# ============================================================
+# Pip temporary version markers (e.g., =0.29.0, =2.1.0)
+# ============================================================
+=[0-9]*
+
+# ============================================================
+# Data & Large Files (视频、数据集、模型权重)
+# ============================================================
+data/emoji_animations/*.mp4
+data/emoji_animations/*.avi
+data/emoji_animations/*.mov
+**/*.pt
+**/*.pth
+**/*.ckpt
+**/*.h5
+**/*.hdf5
+**/*.onnx
+**/*.pb
+**/*.safetensors
+**/*.bin
+!**/requirements.txt
+datasets/
+raw_data/
+recordings/
+
+# ============================================================
+# Training Outputs & Logs
+# ============================================================
+logs/
+tensorboard_runs/
+runs/
+wandb/
+mlruns/
+*.log
+*.csv
+training_outputs/
+checkpoints/
+saved_models/
+experiments/
+
+# ============================================================
+# Jupyter Notebook
+# ============================================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# ============================================================
+# ROS2 Build Artifacts
+# ============================================================
+install/
+log/
+build/
+**/CMakeCache.txt
+**/CMakeFiles/
+**/cmake_install.cmake
+**/Makefile
+**/*.cmake
+!.venv/**/CMakeLists.txt
+
+# ============================================================
+# MuJoCo & Simulation Cache
+# ============================================================
+**/mujoco_*.xml.bak
+**/*.stl.bak
+render_cache/
+simulation_cache/
+
+# ============================================================
+# Sensitive Config & Secrets (环境变量、密钥)
+# ============================================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets.yaml
+config_local.yaml
+credentials.json
+token.json
+
+# ============================================================
+# Test & Coverage Reports
+# ============================================================
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.pytest_cache/
+.tox/
+.nox/
+test_results/
+**/test_*.png
+
+# ============================================================
+# Documentation Builds
+# ============================================================
+docs/_build/
+site/
+.sphinx/
+
+# ============================================================
+# Package Manager Lock Files (可选，视需求保留)
+# ============================================================
+# pip-tools
+requirements-dev.txt.in
+requirements-test.txt.in
+
+# poetry
+poetry.lock
+
+# pdm
+pdm.lock
+
+# uv
+uv.lock
+
+# ============================================================
+# Misc
+# ============================================================
+*.tar.gz
+*.zip
+*.rar
+.eggs/
+.mypy_cache/
+.dmypy.json
+dm.json
+.pyre/
+.pytype/
+.ruff_cache/
+.cache/
+*.pid
+.lock
+*.seed
+*.prof
