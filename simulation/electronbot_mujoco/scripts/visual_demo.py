@@ -30,16 +30,19 @@ from electronbot_mujoco.robot import ElectronBotRobot
 
 
 # ── 预设动作 (模型角度: body, head, left_pitch, left_roll, right_pitch, right_roll) 度 ──
+# 增大角度幅度，使动作更明显
+# 注意: roll关节限位为0-30°(0-0.5236rad)，shoulder限位为-20°~180°(-0.3491~3.1416rad)
+# 避免使用边界值，留1-2°余量
 BUILTIN_POSES = {
-    "zero":        np.array([ 0,  0,  0,  0,  0,  0]),
-    "wave":        np.array([ 0,  0,  0,  0, 80, 15]),
-    "nod":         np.array([ 0, 12,  0,  0,  0,  0]),
-    "heart":       np.array([ 0,  0, 60, 20, 60, 20]),
-    "point_left":  np.array([ 0,  0, 60,  0,  0,  0]),
-    "point_right": np.array([ 0,  0,  0,  0, 60,  0]),
-    "excited":     np.array([30, 15, 80, 20, 80, 20]),
-    "look_left":   np.array([-40, 0,  0,  0,  0,  0]),
-    "look_right":  np.array([ 40, 0,  0,  0,  0,  0]),
+    "zero":        np.array([ 0,  0,   0,  0,   0,  0]),
+    "wave":        np.array([ 0,  0,   0,  0, 120, 22]),      # 大幅挥手 (roll留余量)
+    "nod":         np.array([ 0, 15,   0,  0,   0,  0]),       # 点头 (head限位±15°)
+    "heart":       np.array([ 0,  0,  85, 28,  85, 28]),      # 比心 (避免边界)
+    "point_left":  np.array([ 0,  0,  85,  0,   0,  0]),       # 左手指
+    "point_right": np.array([ 0,  0,   0,  0,  85,  0]),       # 右手指
+    "excited":     np.array([40, 15, 110, 28, 110, 28]),       # 兴奋 (各轴留余量)
+    "look_left":   np.array([-50, 0,   0,  0,   0,  0]),       # 转身 (body限位±90°)
+    "look_right":  np.array([ 50, 0,   0,  0,   0,  0]),       # 转身
 }
 
 SEQUENCE = [
@@ -175,10 +178,13 @@ def run_interactive():
     context = mujoco.MjrContext(robot.model, mujoco.mjtFontScale.mjFONTSCALE_150)
     cam = mujoco.MjvCamera()
     cam.type = mujoco.mjtCamera.mjCAMERA_FREE
-    cam.lookat[:] = [0, 0, 0.01]
-    cam.distance = 0.35
-    cam.azimuth = 180
-    cam.elevation = -15
+    cam.lookat[:] = [0, 0, 0.12]
+    cam.distance = 1.0
+    cam.azimuth = 135
+    cam.elevation = -20
+    
+    # 初始化相机到默认视角
+    mujoco.mjv_defaultFreeCamera(robot.model, cam)
     opt = mujoco.MjvOption()
 
     paused = False
@@ -188,6 +194,30 @@ def run_interactive():
     pose_start = time.time()
 
     print(f"  [{SEQUENCE[0][0]:12s}] {SEQUENCE[0][1]:.1f}s  target={current_target}")
+
+    # 完全重置物理状态到零位
+    robot.data.qpos[:6] = np.zeros(6)
+    robot.data.qvel[:6] = np.zeros(6)
+    robot.data.qacc[:6] = np.zeros(6)
+    robot.send_position_command(np.zeros(6))
+    mujoco.mj_forward(robot.model, robot.data)
+    
+    # 稳定化
+    for _ in range(500):
+        robot.step()
+    
+    # 打印初始状态
+    init_angles = np.degrees(robot.get_joint_positions())
+    init_error = np.abs(init_angles - 0)
+    print(f"\n  [INIT] 初始角度: {init_angles.astype(int)}°")
+    print(f"  [INIT] 初始误差: {init_error.astype(int)}° (应该接近0)")
+    if np.any(init_error > 5):
+        print(f"  ⚠️  警告: 初始误差过大! 某些关节可能未正确归零")
+    
+    print("\n" + "="*60)
+    print("  🎬 开始演示！按空格键可暂停/恢复")
+    print("  📋 动作序列:", " → ".join([f"{s[0]}({s[1]}s)" for s in SEQUENCE]))
+    print("="*60 + "\n")
 
     while not glfw.window_should_close(window):
         if not paused:
@@ -200,14 +230,51 @@ def run_interactive():
                 pose_name, pose_duration = SEQUENCE[pose_idx]
                 current_target = BUILTIN_POSES[pose_name].copy()
                 pose_start = time.time()
-                print(f"  [{pose_name:12s}] {pose_duration:.1f}s  target={current_target}")
+                
+                # 动作切换提示（带emoji和进度）
+                progress = f"[{pose_idx+1}/{len(SEQUENCE)}]"
+                emoji_map = {
+                    "zero": "⚪", "wave": "👋", "nod": "😊",
+                    "heart": "❤️", "point_left": "👈", "point_right": "👉"
+                }
+                emoji = emoji_map.get(pose_name, "🎯")
+                
+                # 检测是否完成一个完整循环
+                if pose_idx == 0:
+                    print(f"\n{'🔄'*30}")
+                    print(f"  🎊 完成一个演示周期！开始新一轮循环...")
+                    print(f"{'🔄'*30}\n")
+                
+                print(f"\n{'─'*60}")
+                print(f"  🔄 切换动作 {progress}: {emoji} **{pose_name.upper()}** (持续{pose_duration}秒)")
+                print(f"     目标角度: {current_target.astype(int)}°")
+                print(f"     [body, head, L_pitch, L_roll, R_pitch, R_roll]")
+                print(f"{'─'*60}\n")
+                
                 elapsed = 0
 
             alpha = min(elapsed / pose_duration, 1.0)
             alpha = alpha * alpha * (3 - 2 * alpha)
             target = prev_target + (current_target - prev_target) * alpha
             robot.send_position_command(np.radians(target))
-            robot.step()
+            
+            # 多步物理仿真以确保到达目标位置
+            for _ in range(50):
+                robot.step()
+            
+            # 关键调试输出: 每10帧打印一次（约0.3秒一次）
+            if int(elapsed * 10) % 3 == 0:
+                current_angles = np.degrees(robot.get_joint_positions())
+                error = np.abs(target - current_angles)
+                max_error_idx = np.argmax(error)
+                joint_names = ['body', 'head', 'L_pitch', 'L_roll', 'R_pitch', 'R_roll']
+                print(f"  [DEBUG] {pose_name:12s} t={elapsed:5.2f}/{pose_duration:.1f}s | "
+                      f"MAX_ERR={error[max_error_idx]:5.1f}° @ {joint_names[max_error_idx]} | "
+                      f"target[{max_error_idx}]={target[max_error_idx]:5.1f}° vs now={current_angles[max_error_idx]:5.1f}°")
+            
+            # 动作即将结束时提示
+            if pose_duration - elapsed < 0.2 and elapsed > 0 and int(elapsed * 10) == int((elapsed - 0.01) * 10):
+                print(f"  [{pose_name}] 完成")
 
         # 渲染
         viewport = mujoco.MjrRect(0, 0, 800, 600)
@@ -220,11 +287,24 @@ def run_interactive():
         # 空格键
         if glfw.get_key(window, glfw.KEY_SPACE) == glfw.PRESS:
             paused = not paused
-            print(f"  {'暂停' if paused else '恢复'}")
+            if paused:
+                print(f"\n{'='*60}")
+                print(f"  ⏸️  **已暂停** - 当前动作: {pose_name}")
+                print(f"     进度: {elapsed:.1f}s / {pose_duration:.1f}s ({100*elapsed/pose_duration:.0f}%)")
+                current_angles = np.degrees(robot.get_joint_positions())
+                print(f"     当前角度: {current_angles.astype(int)}°")
+                print(f"  💡 再次按空格键继续...")
+                print(f"{'='*60}\n")
+            else:
+                print(f"\n  ▶️  **已恢复** - 继续执行 {pose_name} 动作\n")
             time.sleep(0.2)
 
         time.sleep(0.001)
 
+    print(f"\n{'='*60}")
+    print(f"  👋 演示结束！感谢使用 ElectronBot 可视化演示")
+    print(f"{'='*60}\n")
+    
     glfw.terminate()
 
 

@@ -146,12 +146,12 @@
   -->
   <actuator>
     <!-- 位置控制执行器 (6个) - 基础模式; 固件模式下 negligible (forcerange=0.01) -->
-    <position name="act_body"          joint="body_joint"            kp="5" kv="1" forcerange="-0.01 0.01" ctrlrange="-1.5708 1.5708"/>
-    <position name="act_head"          joint="head_joint"            kp="3" kv="1" forcerange="-0.01 0.01" ctrlrange="-0.2618 0.2618"/>
-    <position name="act_left_shoulder"  joint="left_shoulder_joint"  kp="5" kv="1" forcerange="-0.01 0.01" ctrlrange="-0.3491 3.1416"/>
-    <position name="act_left_arm_roll" joint="left_arm_roll_joint"   kp="5" kv="1" forcerange="-0.01 0.01" ctrlrange="0 0.5236"/>
-    <position name="act_right_shoulder" joint="right_shoulder_joint" kp="5" kv="1" forcerange="-0.01 0.01" ctrlrange="-0.3491 3.1416"/>
-    <position name="act_right_arm_roll" joint="right_arm_roll_joint" kp="5" kv="1" forcerange="-0.01 0.01" ctrlrange="0 0.5236"/>
+    <position name="act_body"          joint="body_joint"            kp="20" kv="2" forcerange="-1.0 1.0" ctrlrange="-1.5708 1.5708"/>
+    <position name="act_head"          joint="head_joint"            kp="15" kv="2" forcerange="-0.5 0.5" ctrlrange="-0.2618 0.2618"/>
+    <position name="act_left_shoulder"  joint="left_shoulder_joint"  kp="20" kv="2" forcerange="-1.0 1.0" ctrlrange="-0.3491 3.1416"/>
+    <position name="act_left_arm_roll" joint="left_arm_roll_joint"   kp="20" kv="2" forcerange="-1.0 1.0" ctrlrange="0 0.5236"/>
+    <position name="act_right_shoulder" joint="right_shoulder_joint" kp="20" kv="2" forcerange="-1.0 1.0" ctrlrange="-0.3491 3.1416"/>
+    <position name="act_right_arm_roll" joint="right_arm_roll_joint" kp="20" kv="2" forcerange="-1.0 1.0" ctrlrange="0 0.5236"/>
 
     <!-- 力矩电机 (6个) - DCE PID / impedance 模式; forcerange 对应实机 torque_limit × PWM_max/1000 × 0.3Nm -->
     <motor name="motor_body"           joint="body_joint"            ctrlrange="-0.5 0.5"/>
