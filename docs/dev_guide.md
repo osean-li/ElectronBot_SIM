@@ -39,13 +39,8 @@ python3 simulation/electronbot_mujoco/scripts/test_env.py --test all
 ### 1.5 快速调试
 
 ```bash
-source .venv/bin/activate && python3 -c "import mujoco,torch,gymnasium;print('OK')"
-
-python3 -c "import mujoco;m=mujoco.MjModel.from_xml_path('simulation/electronbot_mujoco/electronbot_mujoco/assets/electronbot_inline.xml');print(m.ngeom)"
-
-python3 simulation/electronbot_mujoco/scripts/test_env.py --test mapping
-
-python3 simulation/electronbot_mujoco/scripts/test_env.py --test protocol
+# 可视化动作演示 (有桌面) 或 MUJOCO_GL=egl python3 ... --headless (无桌面)
+python3 simulation/electronbot_mujoco/scripts/visual_demo.py
 ```
 
 ---
