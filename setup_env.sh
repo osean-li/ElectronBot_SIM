@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # ============================================================
-# ElectronBot_SIM 环境部署脚本 v2.0
+# ElectronBot_SIM 环境部署脚本 v3.0
+# 适配新目录结构 (src/electronbot_*)
 # 支持 Ubuntu 22.04 / 24.04
 # RTX 2060 12GB + CUDA 13.2
 # ============================================================
 # Usage:
-#   bash setup_env.sh                  # Core deps (MuJoCo, Gym, SB3, py_trees)
+#   bash setup_env.sh                  # Core (Phase 1-5: MuJoCo, Gym, MCP)
 #   bash setup_env.sh --gpu            # Core + CUDA PyTorch
-#   bash setup_env.sh --full           # Core + VLA/transformers/vLLM
-#   bash setup_env.sh --gpu --full     # Everything
+#   bash setup_env.sh --ai             # Core + Phase 6 AI 训练管线
+#   bash setup_env.sh --deploy         # Core + Phase 8 Sim2Real 部署
+#   bash setup_env.sh --full           # Everything (Phase 1-8 all deps)
+#   bash setup_env.sh --dev            # Core + 开发工具 (black/pytest)
 # ============================================================
 
 set -euo pipefail
@@ -26,20 +29,35 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 log_step()  { echo -e "\n${BLUE}============================================================${NC}"; echo -e "${BLUE}[STEP]${NC} $*"; echo -e "${BLUE}============================================================${NC}"; }
 
 # --- Parse Args ---
-FULL_MODE=false
 GPU_MODE=false
+AI_MODE=false
+DEPLOY_MODE=false
+FULL_MODE=false
+DEV_MODE=false
 SKIP_ROSDEP=false
 
 for arg in "$@"; do
     case $arg in
-        --full)     FULL_MODE=true ;;
-        --gpu)      GPU_MODE=true ;;
-        --skip-ros) SKIP_ROSDEP=true ;;
+        --gpu)       GPU_MODE=true ;;
+        --ai)        AI_MODE=true ;;
+        --deploy)    DEPLOY_MODE=true ;;
+        --full)      FULL_MODE=true; AI_MODE=true; DEPLOY_MODE=true; DEV_MODE=true ;;
+        --dev)       DEV_MODE=true ;;
+        --skip-ros)  SKIP_ROSDEP=true ;;
         --help)
-            echo "Usage: $0 [--gpu] [--full] [--skip-ros]"
-            echo "  --gpu       Install CUDA-enabled PyTorch"
-            echo "  --full      Install VLA dependencies (transformers, vLLM, OpenVLA)"
-            echo "  --skip-ros  Skip ROS2 apt installs (if already installed)"
+            echo "Usage: $0 [--gpu] [--ai] [--deploy] [--full] [--dev] [--skip-ros]"
+            echo ""
+            echo "  --gpu        Install CUDA-enabled PyTorch (Phase 6 RL/IL)"
+            echo "  --ai         Install AI 训练管线 (Phase 6: SB3, PPO, VLA, IL)"
+            echo "  --deploy     Install Sim2Real 部署依赖 (Phase 8: httpx, onnxruntime)"
+            echo "  --full       Everything (Phase 1-8 all deps + dev tools)"
+            echo "  --dev        Install dev tools (black, isort, pytest)"
+            echo "  --skip-ros   Skip ROS2 apt installs"
+            echo ""
+            echo "Examples:"
+            echo "  bash setup_env.sh                  # 仿真核心 (Phase 1-5)"
+            echo "  bash setup_env.sh --gpu --ai       # 仿真 + RL/IL 训练"
+            echo "  bash setup_env.sh --gpu --full     # 全部依赖"
             exit 0 ;;
     esac
 done
@@ -49,26 +67,42 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ============================================================
 # System Detection
 # ============================================================
-log_step "Detecting System Environment"
+log_step "1/7 Detecting System Environment"
 
 OS_NAME=$(lsb_release -is 2>/dev/null || echo "Unknown")
 OS_CODENAME=$(lsb_release -cs 2>/dev/null || echo "unknown")
+OS_VERSION=$(lsb_release -rs 2>/dev/null || echo "unknown")
 ARCH=$(uname -m)
 PYTHON_VERSION=$(python3 --version 2>/dev/null || echo "NOT FOUND")
+PYTHON_MINOR=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "0.0")
 
-echo "  OS:       ${OS_NAME} ${OS_CODENAME}"
+echo "  OS:       ${OS_NAME} ${OS_CODENAME} (${OS_VERSION})"
 echo "  Arch:     ${ARCH}"
 echo "  Python:   ${PYTHON_VERSION}"
 echo "  Project:  ${SCRIPT_DIR}"
+
+# Python version check
+PYTHON_MAJOR_NUM=$(echo "$PYTHON_MINOR" | cut -d. -f1)
+PYTHON_MINOR_NUM=$(echo "$PYTHON_MINOR" | cut -d. -f2)
+if [ "$PYTHON_MAJOR_NUM" -lt 3 ] || { [ "$PYTHON_MAJOR_NUM" -eq 3 ] && [ "$PYTHON_MINOR_NUM" -lt 10 ]; }; then
+    log_error "Python >= 3.10 是必需的。当前: ${PYTHON_VERSION}"
+    log_info "  安装方法: sudo apt install python3.10 python3.10-venv"
+    exit 1
+fi
+log_info "Python 版本检查: OK (>= 3.10)"
 
 if [[ "$OS_NAME" != "Ubuntu" ]]; then
     log_warn "此脚本优化用于 Ubuntu 22.04/24.04。当前系统: ${OS_NAME}"
 fi
 
+if [[ "$ARCH" != "x86_64" ]]; then
+    log_warn "非 x86_64 架构: ${ARCH}。部分包可能不可用。"
+fi
+
 # ============================================================
 # CUDA / GPU Detection
 # ============================================================
-log_step "Checking CUDA / GPU"
+log_step "2/7 Checking CUDA / GPU"
 
 resolve_torch_cuda_index() {
     local cuda_ver="$1"
@@ -88,8 +122,10 @@ resolve_torch_cuda_index() {
 }
 
 TORCH_INDEX="https://download.pytorch.org/whl/cpu"
+CUDA_INDEX=""
+CUDA_VER=""
 
-if $GPU_MODE; then
+if $GPU_MODE || $AI_MODE || $FULL_MODE; then
     if command -v nvidia-smi &> /dev/null; then
         CUDA_DRIVER_VER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 || echo "")
         CUDA_VER=$(nvidia-smi 2>/dev/null | grep -oP 'CUDA Version: \K[\d.]+' || echo "")
@@ -97,7 +133,6 @@ if $GPU_MODE; then
         log_info "NVIDIA Driver: ${CUDA_DRIVER_VER:-unknown}"
         log_info "CUDA Version:  ${CUDA_VER:-unknown}"
 
-        # Also show GPU info
         GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 || echo "unknown")
         GPU_MEM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader 2>/dev/null | head -1 || echo "unknown")
         log_info "GPU: ${GPU_NAME} (${GPU_MEM})"
@@ -121,13 +156,13 @@ if $GPU_MODE; then
         GPU_MODE=false
     fi
 else
-    log_info "CPU 模式 (使用 --gpu 启用 CUDA)"
+    log_info "CPU 模式 (使用 --gpu 或 --ai 启用 CUDA)"
 fi
 
 # ============================================================
 # ROS2 Detection
 # ============================================================
-log_step "Checking ROS2"
+log_step "3/7 Checking ROS2"
 
 ROS2_SOURCE=""
 ROS2_DISTRO=""
@@ -140,14 +175,14 @@ elif [ -f /opt/ros/jazzy/setup.bash ]; then
     ROS2_DISTRO="jazzy"
     log_info "ROS2 Jazzy 已安装"
 else
-    log_warn "未检测到 ROS2 安装。Phase 3 之前需要安装。"
+    log_warn "未检测到 ROS2 安装 (可选, 不影响仿真核心)"
     log_info "  安装指南: https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html"
 fi
 
 # ============================================================
-# Step 1: System (apt) Dependencies
+# Step 4: System (apt) Dependencies
 # ============================================================
-log_step "Step 1/5: System Dependencies (apt)"
+log_step "4/7 System Dependencies (apt)"
 
 # Resolve dpkg lock
 resolve_dpkg_lock() {
@@ -162,7 +197,6 @@ resolve_dpkg_lock() {
             sudo kill "$pid" 2>/dev/null || true
             sleep 2
             if sudo fuser "$lock_file" >/dev/null 2>&1; then
-                log_warn "仍然被锁，强制 kill..."
                 sudo kill -9 "$pid" 2>/dev/null || true
                 sleep 1
             fi
@@ -177,48 +211,99 @@ resolve_dpkg_lock
 
 sudo apt update -qq -o Acquire::http::Timeout=10
 
+# -----------------------------------------------------------
+# Phase 1 (CAD→MJCF):    libassimp-dev (mesh loading), swig
+# Phase 2 (MuJoCo Env):  libglfw3, libglew, libosmesa6, libegl1, libgles2
+# Phase 3 (MCP Bridge):  (no extra apt deps)
+# Phase 5 (Sensors):     libopencv-dev, libgl1-mesa-*
+# Phase 8 (Sim2Real):    libusb-1.0 (USB CDC)
+# General:               python3-pip, python3-venv, build-essential
+# -----------------------------------------------------------
 APT_PACKAGES=(
-    python3-pip python3-venv python3-dev
-    build-essential cmake
-    libopencv-dev
-    libopenblas-dev
-    libgl1-mesa-glx libgl1-mesa-dri
-    libglib2.0-0
-    libegl1 libgles2
-    libosmesa6              # MuJoCo offscreen rendering
-    libglfw3 libglfw3-dev   # MuJoCo viewer
+    # --- Python ---
+    python3-pip
+    python3-venv
+    python3-dev
+
+    # --- Build tools ---
+    build-essential
+    cmake
+    wget
+    curl
+    git
+
+    # --- MuJoCo rendering (Phase 2) ---
+    libglfw3
+    libglfw3-dev
     libglew-dev
-    libassimp-dev            # MuJoCo mesh loading (STL/OBJ)
-    wget curl git
-    swig
+    libegl1
+    libgles2
+    libosmesa6
+    libgl1-mesa-glx
+    libgl1-mesa-dri
+
+    # --- Mesh processing (Phase 1: CAD→MJCF) ---
+    libassimp-dev
+
+    # --- OpenCV system libs (Phase 5: CameraSensor) ---
+    libopencv-dev
+
+    # --- Math libs ---
+    libopenblas-dev
     libeigen3-dev
-    libusb-1.0-0-dev        # USB CDC (Sim2Real Phase 9)
-    libhdf5-dev              # HDF5 for IL datasets
+
+    # --- GLib (MuJoCo + OpenCV runtime) ---
+    libglib2.0-0
+
+    # --- SWIG (Phase 1: binding generation) ---
+    swig
+
+    # --- USB CDC (Phase 8: Sim2Real 串口) ---
+    libusb-1.0-0-dev
+
+    # --- HDF5 (Phase 6: IL 示范数据集) ---
+    libhdf5-dev
 )
 
 log_info "安装 ${#APT_PACKAGES[@]} 个 apt 包..."
+INSTALLED=0
+SKIPPED=0
 for pkg in "${APT_PACKAGES[@]}"; do
     if dpkg -l "$pkg" 2>/dev/null | grep -q '^ii'; then
-        :
+        : # already installed
     else
-        sudo apt install -y -qq "$pkg" || log_warn "跳过 ${pkg} (安装失败)"
+        if sudo apt install -y -qq "$pkg" 2>/dev/null; then
+            INSTALLED=$((INSTALLED + 1))
+        else
+            log_warn "跳过 ${pkg} (安装失败)"
+            SKIPPED=$((SKIPPED + 1))
+        fi
     fi
 done
+log_info "apt: ${INSTALLED} 新安装, ${SKIPPED} 跳过, $(( ${#APT_PACKAGES[@]} - INSTALLED - SKIPPED )) 已存在"
 
-# ROS2 apt packages (if detected and not skipped)
+# ROS2 apt packages
 if [ -n "$ROS2_SOURCE" ] && ! $SKIP_ROSDEP; then
     log_info "安装 ROS2 工具包..."
-    for pkg in python3-colcon-common-extensions "ros-${ROS2_DISTRO}-rviz2" "ros-${ROS2_DISTRO}-robot-state-publisher" "ros-${ROS2_DISTRO}-joint-state-publisher-gui" "ros-${ROS2_DISTRO}-cv-bridge" "ros-${ROS2_DISTRO}-tf2-ros"; do
+    ROS2_APT_PACKAGES=(
+        python3-colcon-common-extensions
+        "ros-${ROS2_DISTRO}-rviz2"
+        "ros-${ROS2_DISTRO}-robot-state-publisher"
+        "ros-${ROS2_DISTRO}-joint-state-publisher-gui"
+        "ros-${ROS2_DISTRO}-cv-bridge"
+        "ros-${ROS2_DISTRO}-tf2-ros"
+    )
+    for pkg in "${ROS2_APT_PACKAGES[@]}"; do
         sudo apt install -y -qq "$pkg" 2>/dev/null || log_warn "跳过 ${pkg}"
     done
 fi
 
-log_info "系统依赖安装完成。"
+log_info "系统依赖完成"
 
 # ============================================================
-# Step 2: Python Virtual Environment
+# Step 5: Python Virtual Environment
 # ============================================================
-log_step "Step 2/5: Python Virtual Environment"
+log_step "5/7 Python Virtual Environment"
 
 VENV_DIR="${SCRIPT_DIR}/.venv"
 
@@ -229,211 +314,246 @@ else
     log_info "虚拟环境已存在: ${VENV_DIR}"
 fi
 
-# Activate
 source "$VENV_DIR/bin/activate"
-log_info "虚拟环境已激活 (python=$(which python))"
+log_info "虚拟环境已激活 (python=$(which python), v$(python --version 2>&1 | cut -d' ' -f2))"
 
-# Pre-install pyyaml before upgrading pip to prevent ROS2 launch-ros conflict
-# (launch-ros is a system apt package that requires pyyaml; without it,
-#  pip's dependency resolver prints noisy ERROR during setuptools upgrade)
+# Pre-install pyyaml (prevents ROS2 launch-ros conflict during pip upgrade)
 pip install pyyaml -q 2>/dev/null || true
 
-# Upgrade pip safely
 pip install --upgrade pip setuptools wheel -q 2>/dev/null
 
-# Verify no conflicts remain
 pip check 2>/dev/null && log_info "无依赖冲突" || log_warn "存在依赖冲突（不影响后续安装）"
 
 # ============================================================
-# Step 3: Python Core Dependencies
+# Step 6: Python Dependencies — by Phase
 # ============================================================
-log_step "Step 3/5: Python Core Dependencies"
+log_step "6/7 Python Dependencies"
 
-# --- PyTorch (installed first to avoid pulling wrong version) ---
-log_info "检查 PyTorch..."
-NEED_TORCH_INSTALL=false
+# -----------------------------------------------------------
+# Phase 1: CAD → MJCF  (scripts/)
+#   yourdfpy    — URDF/MJCF 转换
+#   trimesh     — 网格简化 / 凸包分解
+#   lxml        — XML 处理 (MJCF 生成)
+#   numpy/scipy — 惯性矩阵计算
+# -----------------------------------------------------------
+log_info "[Phase 1] CAD→MJCF 依赖..."
+pip install "yourdfpy>=0.0.56" "trimesh>=4.0.0" "lxml>=5.0.0" -q
 
-if python -c "import torch; print(torch.__version__)" 2>/dev/null; then
-    TORCH_VER=$(python -c "import torch; print(torch.__version__)")
-    TORCH_CUDA=$(python -c "import torch; print(torch.cuda.is_available())")
-    log_info "PyTorch 已安装: v${TORCH_VER} (CUDA=${TORCH_CUDA})"
+# -----------------------------------------------------------
+# Phase 2: MuJoCo 仿真核心  (src/electronbot_sim/env.py)
+#   mujoco      — 物理引擎
+#   gymnasium   — RL 环境接口
+#   numpy       — 数值计算
+# -----------------------------------------------------------
+log_info "[Phase 2] MuJoCo 仿真核心依赖..."
+pip install "mujoco>=3.2.0" "gymnasium>=0.29.0" -q
 
-    if $GPU_MODE; then
-        if [ "$TORCH_CUDA" = "True" ]; then
-            log_info "已有 CUDA 版本，跳过安装"
+# -----------------------------------------------------------
+# Phase 3: MCP Bridge  (src/electronbot_sim/mcp_bridge.py)
+#   websockets  — WebSocket 服务器
+# -----------------------------------------------------------
+log_info "[Phase 3] MCP Bridge 依赖..."
+pip install "websockets>=12.0" -q
+
+# -----------------------------------------------------------
+# Phase 4-5: 动作系统 + 传感器 (无需额外依赖, 用 Phase 1-3 已有)
+#   opencv-python — CameraSensor RGB/D 图像处理
+# -----------------------------------------------------------
+log_info "[Phase 4-5] 动作 + 传感器依赖..."
+pip install "opencv-python>=4.8.0" -q
+
+# -----------------------------------------------------------
+# 通用依赖 (跨 Phase)
+# -----------------------------------------------------------
+log_info "安装通用依赖..."
+pip install numpy scipy matplotlib pyyaml h5py tqdm -q
+
+# -----------------------------------------------------------
+# Phase 6: AI 训练管线 (--ai)
+#   stable-baselines3 — PPO/SAC RL 算法
+#   torch             — IL (BC/ACT) + RL
+#   einops            — ACT 模型张量操作
+#   diffusers         — ACT 扩散策略
+#   accelerate        — 模型加速
+#   tensorboard       — 训练日志
+#   py_trees          — 行为树 (AI→动作调度)
+# -----------------------------------------------------------
+if $AI_MODE; then
+    log_info "[Phase 6] AI 训练管线依赖..."
+
+    # PyTorch first (explicit, correct index)
+    NEED_TORCH=false
+    if python -c "import torch" 2>/dev/null; then
+        TORCH_CUDA=$(python -c "import torch; print(torch.cuda.is_available())")
+        if $GPU_MODE && [ "$TORCH_CUDA" != "True" ]; then
+            log_info "当前为 CPU 版本，重装 GPU 版本..."
+            NEED_TORCH=true
         else
-            log_info "当前为 CPU 版本，需要重装 GPU 版本..."
-            NEED_TORCH_INSTALL=true
+            log_info "PyTorch 已安装: v$(python -c 'import torch; print(torch.__version__)')"
         fi
     else
-        log_info "跳过 PyTorch 安装"
+        NEED_TORCH=true
     fi
-else
-    NEED_TORCH_INSTALL=true
-fi
 
-if $NEED_TORCH_INSTALL; then
-    log_info "安装 PyTorch (index: ${TORCH_INDEX})..."
-    pip install --force-reinstall torch --index-url "$TORCH_INDEX" -q
-fi
+    if $NEED_TORCH; then
+        log_info "安装 PyTorch (index: ${TORCH_INDEX})..."
+        pip install --force-reinstall torch --index-url "$TORCH_INDEX" -q
+    fi
 
-if $GPU_MODE; then
-    log_info "验证 CUDA 可用性..."
-    if python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'" 2>/dev/null; then
-        GPU_NAME=$(python -c "import torch; print(torch.cuda.get_device_name(0))")
-        log_info "PyTorch CUDA: OK (${GPU_NAME})"
+    pip install "stable-baselines3>=2.3.0" "py_trees>=2.0.0" tensorboard -q
+    pip install einops -q
+
+    if $GPU_MODE; then
+        pip install diffusers accelerate -q --extra-index-url "$TORCH_INDEX"
     else
-        log_error "PyTorch 报告 CUDA 不可用！检查 driver/CUDA 兼容性。"
-        log_error "  Driver CUDA: ${CUDA_VER}, PyTorch index: ${CUDA_INDEX}"
+        pip install diffusers accelerate -q --extra-index-url "$TORCH_INDEX"
     fi
-fi
 
-# --- MuJoCo (explicit install) ---
-log_info "安装 MuJoCo..."
-pip install mujoco>=3.1.0 -q
+    # VLA 依赖 (transformers + vLLM)
+    log_info "[Phase 6] VLA 依赖 (transformers)..."
+    pip install "transformers>=4.40.0" peft accelerate sentencepiece -q
+    pip install bitsandbytes -q 2>/dev/null || log_warn "bitsandbytes 安装失败 (CUDA 兼容性)"
 
-# --- Core RL/Simulation stack ---
-log_info "安装仿真与 RL 依赖..."
-pip install gymnasium>=0.29.0 stable-baselines3>=2.3.0 -q
-pip install tensorboard -q
+    if $GPU_MODE; then
+        log_info "[Phase 6] vLLM (Qwen2-VL 推理)..."
+        pip install vllm -q 2>/dev/null || {
+            log_warn "vLLM 安装失败。可尝试: pip install vllm --no-build-isolation"
+        }
+        log_info "[Phase 6] OpenVLA..."
+        pip install git+https://github.com/openvla/openvla.git -q 2>/dev/null || {
+            log_warn "OpenVLA 安装失败 (需 GitHub 访问)"
+        }
+    fi
 
-# --- Math & Data ---
-log_info "安装数学与数据处理..."
-pip install numpy scipy matplotlib opencv-python pyyaml -q
-pip install h5py tqdm -q
-
-# --- Behavior Tree ---
-log_info "安装 behavior tree..."
-pip install py_trees>=2.0.0 -q
-
-# --- Imitation Learning ---
-log_info "安装 IL 依赖 (PyTorch已安装)..."
-pip install einops -q
-# diffusers pulls additional torch deps, be careful
-if $GPU_MODE; then
-    pip install diffusers accelerate -q --extra-index-url "$TORCH_INDEX"
+    pip install datasets pyarrow -q  # LoRA finetuning
+    log_info "[Phase 6] AI 依赖完成"
 else
-    pip install diffusers accelerate -q --extra-index-url "$TORCH_INDEX"
+    log_info "跳过 AI 依赖 (使用 --ai 启用 Phase 6)"
 fi
 
-# --- Image recording ---
-log_info "安装视频录制..."
-pip install imageio[ffmpeg] -q 2>/dev/null || log_warn "imageio[ffmpeg] 安装失败，跳过"
+# -----------------------------------------------------------
+# Phase 7: Benchmark (src/electronbot_benchmark/)
+#   pandas     — 数据统计
+#   tabulate   — 表格输出
+# -----------------------------------------------------------
+log_info "[Phase 7] Benchmark 依赖..."
+pip install pandas tabulate -q
 
-# --- Dev tools ---
-log_info "安装开发工具..."
-pip install black isort pytest -q
+# -----------------------------------------------------------
+# Phase 8: Sim2Real 部署 (--deploy)
+#   httpx        — 异步 HTTP 客户端 (云端 API 透传)
+#   onnxruntime  — ONNX 模型推理
+# -----------------------------------------------------------
+if $DEPLOY_MODE; then
+    log_info "[Phase 8] Sim2Real 部署依赖..."
+    pip install "httpx>=0.27.0" "onnxruntime>=1.17.0" -q
+    pip install imageio[ffmpeg] -q 2>/dev/null || log_warn "imageio[ffmpeg] 跳过"
+    log_info "[Phase 8] Sim2Real 依赖完成"
+else
+    log_info "跳过 Sim2Real 依赖 (使用 --deploy 启用 Phase 8)"
+fi
 
-# --- Check integrity ---
+# -----------------------------------------------------------
+# Dev tools (--dev)
+# -----------------------------------------------------------
+if $DEV_MODE; then
+    log_info "安装开发工具..."
+    pip install black isort pytest pytest-asyncio -q
+    log_info "开发工具完成"
+fi
+
+# Integrity check
+echo ""
 if pip check 2>/dev/null; then
-    log_info "核心依赖完整性: OK"
+    log_info "Python 依赖完整性: OK"
 else
     log_warn "部分依赖冲突。运行 'pip check' 查看详情。"
 fi
 
 # ============================================================
-# Step 4: Full/VLA Dependencies (optional)
+# Step 7: Post-install Verification
 # ============================================================
-if $FULL_MODE; then
-    log_step "Step 4/5: Full Dependencies (VLA/VLM/Transformers)"
-
-    log_info "安装 transformers + PEFT + bitsandbytes..."
-    pip install transformers>=4.40.0 peft accelerate sentencepiece -q
-    pip install bitsandbytes -q 2>/dev/null || log_warn "bitsandbytes 安装失败 (可能不支持当前 CUDA)"
-
-    # vLLM - only for GPU, needs > 7GB VRAM for Qwen2-VL 7B
-    if $GPU_MODE; then
-        log_info "安装 vLLM (用于 Qwen2-VL 7B 推理)..."
-        pip install vllm -q 2>/dev/null || {
-            log_warn "vLLM 安装失败。可尝试:"
-            log_warn "  pip install vllm --no-build-isolation"
-            log_warn "  或跳过 VLA Phase 6，先用 mock 模式开发。"
-        }
-
-        # OpenVLA
-        log_info "安装 OpenVLA..."
-        pip install git+https://github.com/openvla/openvla.git -q 2>/dev/null || {
-            log_warn "OpenVLA 安装失败 (需要网络 + GitHub 访问)"
-            log_info "  Phase 6 可先用 Qwen2-VL 模式，OpenVLA 为可选对比方案。"
-        }
-    else
-        log_warn "VLA 依赖 (vLLM/OpenVLA) 需要 GPU。使用 --gpu 启用。"
-    fi
-
-    # LoRA finetuning
-    log_info "安装 LoRA 微调依赖..."
-    pip install datasets pyarrow -q
-
-    # Plotting
-    log_info "安装可视化..."
-    pip install plotly -q
-
-    # Re-check
-    pip check 2>/dev/null || log_warn "完整依赖有冲突（不影响核心功能）"
-
-    log_info "VLA/Full 依赖安装完成。"
-else
-    log_info "Skipping full dependencies (use --full to install VLA stack)"
-fi
-
-# ============================================================
-# Step 5: Post-install Verification
-# ============================================================
-log_step "Step 5/5: Verifying Installation"
+log_step "7/7 Verifying Installation"
 
 check_python_pkg() {
-    python -c "import $1" 2>/dev/null && echo -e "  ${GREEN}✓${NC} $1" || echo -e "  ${RED}✗${NC} $1 (optional)"
+    local pkg="$1"
+    local import_name="${2:-$1}"
+    python -c "import ${import_name}" 2>/dev/null && echo -e "  ${GREEN}✓${NC} ${pkg}" || echo -e "  ${RED}✗${NC} ${pkg}"
 }
 
-echo "核心模块:"
-check_python_pkg "torch"
-check_python_pkg "numpy"
-check_python_pkg "mujoco"
-check_python_pkg "cv2"
-check_python_pkg "gymnasium"
-check_python_pkg "stable_baselines3"
-check_python_pkg "py_trees"
-check_python_pkg "h5py"
-check_python_pkg "yaml"
-check_python_pkg "einops"
-
-if $FULL_MODE; then
-    echo ""
-    echo "VLA 模块:"
-    check_python_pkg "transformers"
-    check_python_pkg "peft"
-    check_python_pkg "accelerate"
-    check_python_pkg "vllm"
-    check_python_pkg "datasets"
-fi
+echo "Phase 1 (CAD→MJCF):"
+check_python_pkg "yourdfpy"
+check_python_pkg "trimesh"
+check_python_pkg "lxml"
 
 echo ""
-echo "ElectronBot 项目模块:"
-# Check if electronbot_mujoco is importable
-if python -c "import sys; sys.path.insert(0, '${SCRIPT_DIR}/simulation/electronbot_mujoco'); \
-    from electronbot_mujoco.robot import ElectronBotRobot" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} electronbot_mujoco (可导入)"
-else
-    echo -e "  ${RED}✗${NC} electronbot_mujoco (检查 PYTHONPATH)"
+echo "Phase 2 (MuJoCo 仿真):"
+check_python_pkg "mujoco"
+check_python_pkg "gymnasium"
+check_python_pkg "numpy"
+check_python_pkg "scipy"
+
+echo ""
+echo "Phase 3 (MCP Bridge):"
+check_python_pkg "websockets"
+
+echo ""
+echo "Phase 4-5 (动作 + 传感器):"
+check_python_pkg "opencv (cv2)" "cv2"
+
+echo ""
+echo "通用:"
+check_python_pkg "h5py"
+check_python_pkg "pyyaml" "yaml"
+check_python_pkg "tqdm"
+check_python_pkg "pandas"
+check_python_pkg "tabulate"
+check_python_pkg "matplotlib"
+
+if $AI_MODE; then
+    echo ""
+    echo "Phase 6 (AI 训练):"
+    check_python_pkg "torch"
+    check_python_pkg "stable_baselines3"
+    check_python_pkg "py_trees"
+    check_python_pkg "einops"
+    check_python_pkg "transformers"
+    check_python_pkg "diffusers"
+    check_python_pkg "accelerate"
+    if $GPU_MODE; then
+        check_python_pkg "vllm" 2>/dev/null || echo -e "  ${YELLOW}○${NC} vllm (可选)"
+        check_python_pkg "peft" 2>/dev/null || echo -e "  ${YELLOW}○${NC} peft (可选)"
+    fi
 fi
 
-if python -c "import sys; sys.path.insert(0, '${SCRIPT_DIR}/simulation/electronbot_mujoco'); \
-    from electronbot_mujoco.tasks import TASKS" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Benchmark tasks (5 个任务可加载)"
+if $DEPLOY_MODE; then
+    echo ""
+    echo "Phase 8 (Sim2Real 部署):"
+    check_python_pkg "httpx"
+    check_python_pkg "onnxruntime"
+    check_python_pkg "imageio"
 fi
 
-if python -c "import sys; sys.path.insert(0, '${SCRIPT_DIR}/ai/rl'); \
-    from electronbot_rl.emotional_reward import EmotionalRewardShaper" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} emotional_reward (3 种情绪模式)"
-fi
+# Project module check
+echo ""
+echo "项目模块:"
+check_project_module() {
+    local module_path="$1"
+    local module_name="$2"
+    if python -c "import sys; sys.path.insert(0, '${SCRIPT_DIR}/src'); import ${module_name}" 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} ${module_name} (${module_path})"
+    else
+        echo -e "  ${YELLOW}○${NC} ${module_name} (src/ 待实现)"
+    fi
+}
 
-if python -c "import sys; sys.path.insert(0, '${SCRIPT_DIR}/behavior'); \
-    from electronbot_behavior.behavior_tree import build_find_and_touch_tree" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} behavior_tree (py_trees 可用)"
-fi
+check_project_module "src/electronbot_sim" "electronbot_sim"
+check_project_module "src/electronbot_ai" "electronbot_ai"
+check_project_module "src/electronbot_benchmark" "electronbot_benchmark"
+check_project_module "src/electronbot_sim2real" "electronbot_sim2real"
 
-# GPU check
-if $GPU_MODE; then
+# GPU status
+if $GPU_MODE || $AI_MODE; then
     echo ""
     echo "GPU 状态:"
     python -c "
@@ -442,15 +562,15 @@ if torch.cuda.is_available():
     name = torch.cuda.get_device_name(0)
     mem  = torch.cuda.get_device_properties(0).total_memory / 1024**3
     cuda = torch.version.cuda
-    print(f'  \u2713 {name}')
-    print(f'  \u2713 VRAM: {mem:.1f} GB')
-    print(f'  \u2713 CUDA: {cuda} (PyTorch)')
+    print(f'  \033[0;32m✓\033[0m {name}')
+    print(f'  \033[0;32m✓\033[0m VRAM: {mem:.1f} GB')
+    print(f'  \033[0;32m✓\033[0m CUDA: {cuda} (PyTorch)')
 else:
-    print('  \u2717 CUDA 不可用')
-" 2>&1
+    print('  \033[0;31m✗\033[0m CUDA 不可用 (仅 CPU)')
+" 2>&1 || echo -e "  ${RED}✗${NC} PyTorch 未安装"
 fi
 
-# ROS2 check
+# ROS2 status
 if [ -n "$ROS2_SOURCE" ]; then
     echo ""
     echo "ROS2 状态:"
@@ -471,35 +591,63 @@ fi
 log_step "安装完成!"
 
 echo ""
-echo "  ┌──────────────────────────────────────────────────────┐"
-echo "  │  ElectronBot_SIM 环境信息                             │"
-echo "  ├──────────────────────────────────────────────────────┤"
+echo "  ┌──────────────────────────────────────────────────────────┐"
+echo "  │  ElectronBot_SIM 环境信息                                 │"
+echo "  ├──────────────────────────────────────────────────────────┤"
 echo "  │  项目路径:   ${SCRIPT_DIR}"
 echo "  │  虚拟环境:   ${VENV_DIR}"
-echo "  │  GPU 模式:   $GPU_MODE"
-echo "  │  Full 模式:  $FULL_MODE"
+echo "  │  GPU 模式:   ${GPU_MODE}"
+echo "  │  AI 训练:    ${AI_MODE}"
+echo "  │  Sim2Real:   ${DEPLOY_MODE}"
+echo "  │  开发工具:   ${DEV_MODE}"
 echo "  │  ROS2:       ${ROS2_DISTRO:-未安装}"
-echo "  └──────────────────────────────────────────────────────┘"
+echo "  │  CUDA:       ${CUDA_VER:-N/A} → ${CUDA_INDEX:-cpu}"
+echo "  └──────────────────────────────────────────────────────────┘"
 echo ""
-echo "  下一步:"
+echo "  激活虚拟环境:"
 echo "    source .venv/bin/activate"
 echo ""
-echo "  验证仿真环境:"
-echo "    python simulation/electronbot_mujoco/scripts/test_env.py --test all"
+
+echo "  Phase 验证:"
+echo "    # Phase 1: 模型验证"
+echo "    python scripts/validate_model.py"
 echo ""
-echo "  开始 RL 训练:"
-echo "    python ai/rl/electronbot_rl/train_ppo.py --task reach --arm right"
+echo "    # Phase 2: 环境测试"
+echo "    python -m pytest tests/test_env.py -v"
 echo ""
-echo "  行为树 Demo (需 MuJoCo):"
-echo "    python behavior/electronbot_behavior/behavior_tree.py"
+echo "    # Phase 3: MCP 端到端测试"
+echo "    python -m pytest tests/test_websocket_e2e.py -v"
 echo ""
+echo "    # Phase 5: 传感器测试"
+echo "    python -m pytest tests/test_sensors.py -v"
+echo ""
+
+if $AI_MODE; then
+echo "  AI 训练:"
+echo "    # Phase 6: RL 训练"
+echo "    python -m electronbot_ai.rl.train_ppo --task reach"
+echo ""
+echo "    # Phase 6: IL 训练"
+echo "    python -m electronbot_ai.il.train_bc --task reach"
+echo ""
+fi
+
+if $DEPLOY_MODE; then
+echo "  Sim2Real 部署:"
+echo "    # Phase 8: 云端 API 连接测试"
+echo "    python -m pytest tests/test_sim2real_cloud.py -v"
+echo ""
+fi
+
 if [ -n "$ROS2_SOURCE" ]; then
 echo "  ROS2 仿真启动:"
 echo "    source ${ROS2_SOURCE}"
 echo "    ros2 launch electronbot_mujoco_ros2 sim.launch.py"
-fi
 echo ""
+fi
+
 echo "  Tips:"
-echo "    setup_env.sh --gpu --full    重装完整依赖"
-echo "    setup_env.sh --skip-ros      跳过 ROS2 apt 安装"
+echo "    setup_env.sh --gpu --ai --deploy  仿真+训练+部署"
+echo "    setup_env.sh --full               全部依赖"
+echo "    setup_env.sh --skip-ros           跳过 ROS2"
 echo ""

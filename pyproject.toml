@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "electronbot-sim"
+version = "0.2.0"
+description = "ElectronBot 仿真与 AI 训练平台 — MuJoCo 物理仿真 + MCP 协议 + IL/RL/VLA 训练"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "ElectronBot_SIM Team"}]
+keywords = ["mujoco", "robotics", "reinforcement-learning", "imitation-learning", "vla", "electronbot"]
+
+dependencies = [
+    "numpy>=1.24",
+    "mujoco>=3.0",
+    "gymnasium>=0.29",
+]
+
+[project.optional-dependencies]
+# Phase 1: CAD 建模
+cad = ["trimesh>=4.0", "yourdfpy"]
+
+# Phase 3: MCP Bridge
+mcp = ["websockets>=10.0", "httpx>=0.24"]
+
+# Phase 5: 传感器
+sensors = ["opencv-python>=4.8"]
+
+# Phase 6: AI 训练
+ai = [
+    "torch>=2.0",
+    "stable-baselines3>=2.0",
+    "h5py>=3.0",
+    "tensorboard>=2.10",
+]
+vla = ["transformers>=4.30"]
+
+# Phase 8: Sim2Real
+sim2real = ["onnxruntime>=1.15"]
+
+# 开发工具
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+]
+
+# 全量安装
+full = [
+    "electronbot-sim[cad,mcp,sensors,ai,vla,sim2real,dev]",
+]
+
+[project.urls]
+Documentation = "https://github.com/electronbot/electronbot-sim/docs"
+Repository = "https://github.com/electronbot/electronbot-sim"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["electronbot_sim*", "electronbot_ai*", "electronbot_benchmark*", "electronbot_sim2real*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: 标记慢测试",
+    "gpu: 需要 GPU 的测试",
+    "mujoco: 需要 MuJoCo 的测试",
+    "asyncio: 异步测试",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B"]
+ignore = ["E501"]  # 行长度由 line-length 控制
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F401", "F811"]  # 测试文件允许未使用导入

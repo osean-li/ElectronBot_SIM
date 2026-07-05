@@ -1,0 +1,19 @@
+<!--
+  ElectronBot 场景 — include mesh 版机器人 + 桌面环境
+  用途: RL 训练、Benchmark 评估
+-->
+<mujoco model="electronbot_scene">
+  <include file="electronbot_mesh.xml" />
+
+  <worldbody>
+    <!-- 桌面 -->
+    <geom name="table" type="box" size="0.2 0.2 0.01" pos="0 0 -0.05"
+          rgba="0.6 0.4 0.2 1" />
+
+    <!-- 第二组光源 (electronbot.xml 已有 top/side, 此处补一组) -->
+    <light name="fill" pos="-0.3 0.3 0.4" />
+
+    <!-- head_cam 已在 electronbot.xml 中定义, 这里补充侧视相机 -->
+    <camera name="side_cam" pos="0.3 0.3 0.25" xyaxes="-0.7 -0.7 0 0 0 1" fovy="45" />
+  </worldbody>
+</mujoco>
