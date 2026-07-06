@@ -98,7 +98,15 @@ def run_headless(xml_path: str, output_dir: str = "/tmp/electronbot_demo"):
     model = mujoco.MjModel.from_xml_path(xml_path)
     data = mujoco.MjData(model)
     renderer = mujoco.Renderer(model, 480, 640)
-    # 使用默认相机，MuJoCo 自动适配机器人模型
+
+    # 设置相机: 侧上方俯视, 同时展示机器人和棋盘格地面
+    camera = mujoco.MjvCamera()
+    camera.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+    camera.trackbodyid = model.body("base_link").id
+    camera.distance = 0.28
+    camera.azimuth = 135
+    camera.elevation = -25
+    camera.lookat[:] = [0.0, 0.0, 0.05]
 
     frame_dir = Path(output_dir)
     frame_dir.mkdir(parents=True, exist_ok=True)
@@ -145,7 +153,7 @@ def run_headless(xml_path: str, output_dir: str = "/tmp/electronbot_demo"):
             mujoco.mj_step(model, data)
 
         if frame % 5 == 0:
-            renderer.update_scene(data)
+            renderer.update_scene(data, camera=camera)
             pixels = renderer.render()
             if pixels is not None:
                 try:

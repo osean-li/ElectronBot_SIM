@@ -1,0 +1,11 @@
+<!--
+  ElectronBot 场景 — include mesh 版
+  生成时间: 2026-07-06T18:34:14
+-->
+<mujoco model="electronbot_scene_mesh">
+  <include file="electronbot_mesh.xml" />
+  <worldbody>
+    <light name="top" pos="0 0 1" dir="0 0 -1" directional="true"/>
+    <camera name="view" pos="0.3 0 0.2" xyaxes="-1 0 0 0 0 1" fovy="60"/>
+  </worldbody>
+</mujoco>
