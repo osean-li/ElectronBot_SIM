@@ -29,25 +29,6 @@ PROJECT = Path(__file__).resolve().parent.parent.parent
 XML_PATH = PROJECT / "assets" / "mjcf" / "electronbot_full_arm.xml"
 
 
-def describe_action(name: str) -> str:
-    """返回动作的中文描述"""
-    descriptions = {
-        "zero":        "回到初始姿态",
-        "wave":        "挥右手",
-        "wave_left":   "挥左手",
-        "nod":         "点头",
-        "heart":       "比心（双臂举高）",
-        "point_left":  "手指向左",
-        "point_right": "手指向右",
-        "excited":     "兴奋（转身+举手）",
-        "look_left":   "向左看（腰部左转）",
-        "look_right":  "向右看（腰部右转）",
-        "bye_left":    "左手再见",
-        "bye_right":   "右手再见",
-    }
-    return descriptions.get(name, name)
-
-
 # ── 预设动作 (角度制) ──
 # 关节顺序: [body(腰部Z), head(头部Y), L_pitch(左臂Y), L_roll(左臂X), R_pitch(右臂Y), R_roll(右臂X)]
 BUILTIN_POSES = {
@@ -87,6 +68,25 @@ SEQUENCE = [
 ]
 
 
+def describe_action(name: str) -> str:
+    """返回动作的中文描述"""
+    descriptions = {
+        "zero":        "回到初始姿态",
+        "wave":        "挥右手",
+        "wave_left":   "挥左手",
+        "nod":         "点头",
+        "heart":       "比心（双臂举高）",
+        "point_left":  "手指向左",
+        "point_right": "手指向右",
+        "excited":     "兴奋（转身+举手）",
+        "look_left":   "向左看（腰部左转）",
+        "look_right":  "向右看（腰部右转）",
+        "bye_left":    "左手再见",
+        "bye_right":   "右手再见",
+    }
+    return descriptions.get(name, name)
+
+
 def interpolate(prev: np.ndarray, current: np.ndarray, alpha: float) -> np.ndarray:
     """ease-in-out 插值"""
     alpha = alpha * alpha * (3 - 2 * alpha)
@@ -98,16 +98,7 @@ def run_headless(xml_path: str, output_dir: str = "/tmp/electronbot_demo"):
     model = mujoco.MjModel.from_xml_path(xml_path)
     data = mujoco.MjData(model)
     renderer = mujoco.Renderer(model, 480, 640)
-    # 调整相机角度,让地面可见
-    camera = mujoco.MjvCamera()
-    mujoco.mjv_defaultCamera(camera)
-    camera.type = mujoco.mjtCamera.mjCAMERA_FREE
-    camera.lookat[:] = [0, 0, 0.05]
-    camera.distance = 0.35
-    camera.azimuth = 135
-    camera.elevation = -20
-    camera.trackbodyid = -1
-    camera.fixedcamid = -1
+    # 使用默认相机，MuJoCo 自动适配机器人模型
 
     frame_dir = Path(output_dir)
     frame_dir.mkdir(parents=True, exist_ok=True)
@@ -127,12 +118,10 @@ def run_headless(xml_path: str, output_dir: str = "/tmp/electronbot_demo"):
     prev_target = np.zeros(6)
     pose_idx = 0
     frame_count = 0
-    _, _ = SEQUENCE[0]
     current_target = np.array(BUILTIN_POSES[SEQUENCE[0][0]], dtype=float)
     pose_start_frame = 0
     total_frames = int(sum(d for _, d in SEQUENCE) * 10)
 
-    # 打印第一个动作
     print(f"  ▶ {describe_action(SEQUENCE[0][0])}")
 
     for frame in range(total_frames):
@@ -156,7 +145,7 @@ def run_headless(xml_path: str, output_dir: str = "/tmp/electronbot_demo"):
             mujoco.mj_step(model, data)
 
         if frame % 5 == 0:
-            renderer.update_scene(data, camera="main")
+            renderer.update_scene(data)
             pixels = renderer.render()
             if pixels is not None:
                 try:
@@ -230,7 +219,6 @@ def run_interactive(xml_path: str):
                     pose_start = time.time()
                     prev_pose_name = ""
 
-                # 只在切换动作时打印
                 if pose_name != prev_pose_name:
                     print(f"  ▶ {describe_action(pose_name)}")
                     prev_pose_name = pose_name
