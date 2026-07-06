@@ -1,0 +1,264 @@
+# -*- coding: utf-8 -*-
+"""electronBot 关节控制 v4 - 最终版
+直接操纵 24 个子零件的 Placement 实现 6 关节控制
+"""
+
+from FreeCAD import Rotation, Vector, Placement
+import FreeCAD as App
+import FreeCADGui as Gui
+from PySide import QtGui, QtCore, QtWidgets
+import math
+
+# ============================================================
+# 零件分组（基于之前 Python 控制台的 cx/cz 坐标分析）
+# ============================================================
+
+# 身体组（绕 Z 轴旋转腰部）
+BODY_PARTS = [
+    "Part__Feature034",  # cx=-1 cz=-9 vol=16545 身体中心
+    "Part__Feature035",  # cx=8  cz=-5 vol=18741 身体右侧
+    "Part__Feature036",  # cx=-13 cz=-5 vol=18652 身体左侧
+]
+
+# 头部组（绕 Y 轴俯仰）
+HEAD_PARTS = [
+    "Part__Feature037",  # cx=-1 cz=25 vol=2428  前脸
+    "Part__Feature038",  # cx=1  cz=42 vol=9195  头顶
+    "Part__Feature039",  # cx=1  cz=36 vol=14318 头部主壳
+    "Part__Feature040",  # cx=7  cz=23 vol=136   小件
+    "Part__Feature041",  # cx=6  cz=1  vol=23    小件
+]
+
+# 右臂组（绕 Y 轴 Pitch，绕 X 轴 Roll）
+RIGHT_ARM_PARTS = [
+    "Part__Feature027",  # cx=20 cz=-7 vol=456  齿轮
+    "Part__Feature028",  # cx=14 cz=3  vol=382  小齿轮
+    "Part__Feature029",  # cx=3  cz=0  vol=264  右手
+    "Part__Feature030",  # cx=22 cz=5  vol=53   臂件
+    "Part__Feature031",  # cx=19 cz=6  vol=201  臂件
+    "Part__Feature032",  # cx=23 cz=-5 vol=1022 臂件
+    "Part__Feature033",  # cx=24 cz=-5 vol=1283 臂件
+]
+
+# 左臂组（绕 Y 轴 Pitch，绕 X 轴 Roll）
+LEFT_ARM_PARTS = [
+    "Part__Feature042",  # cx=-10 cz=0  vol=264  左手
+    "Part__Feature045",  # cx=-10 cz=0  vol=264  左手镜
+    "Part__Feature046",  # cx=-24 cz=5  vol=53   臂件
+    "Part__Feature047",  # cx=-21 cz=6  vol=201  臂件
+    "Part__Feature048",  # cx=-25 cz=-5 vol=1022 臂件
+    "Part__Feature049",  # cx=-26 cz=-5 vol=1283 臂件
+]
+
+# 底座（不动）
+BASE_PARTS = [
+    "Part__Feature043",  # cx=-1 cz=-37 vol=21440
+    "Part__Feature044",  # cx=-2 cz=-40 vol=8198
+]
+
+
+class JointController(QtWidgets.QDialog):
+    def __init__(self, doc):
+        super().__init__()
+        self.doc = doc
+        self.shell = doc.getObject("_X2_52A05DE54EF6_X0_")
+        
+        # 保存所有零件的初始 Placement
+        self.init_placements = {}
+        for child in self.shell.OutList:
+            if child.isDerivedFrom("Part::Feature"):
+                self.init_placements[child.Name] = Placement(child.Placement)
+        
+        # 计算各组旋转中心
+        self.pivots = {}
+        for name, parts in [("body", BODY_PARTS), ("head", HEAD_PARTS),
+                             ("left_arm", LEFT_ARM_PARTS), ("right_arm", RIGHT_ARM_PARTS)]:
+            px, py, pz, n = 0, 0, 0, 0
+            for pname in parts:
+                obj = doc.getObject(pname)
+                if obj:
+                    c = obj.Shape.BoundBox.Center
+                    px += c.x; py += c.y; pz += c.z; n += 1
+            if n > 0:
+                self.pivots[name] = Vector(px/n, py/n, pz/n)
+        
+        # 当前各轴角度
+        self.angles = {}
+        
+        self.setup_ui()
+    
+    def setup_ui(self):
+        self.setWindowTitle("electronBot 关节控制 v4")
+        self.resize(550, 430)
+        
+        layout = QtWidgets.QVBoxLayout(self)
+        
+        title = QtWidgets.QLabel("<h2>electronBot 关节控制器</h2>")
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(title)
+        
+        tip = QtWidgets.QLabel("拖动滑块，机器人关节实时转动！")
+        tip.setAlignment(QtCore.Qt.AlignCenter)
+        tip.setStyleSheet("color: gray;")
+        layout.addWidget(tip)
+        
+        # 分隔线
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.HLine)
+        layout.addWidget(line)
+        
+        joints = [
+            ("body_z", "腰部旋转 [Z轴]", -90, 90, "body", "Z"),
+            ("head_y", "头部俯仰 [Y轴]", -30, 30, "head", "Y"),
+            ("left_pitch", "左臂 Pitch [Y轴]", -90, 90, "left_arm", "Y"),
+            ("left_roll", "左臂 Roll [X轴]", -45, 45, "left_arm", "X"),
+            ("right_pitch", "右臂 Pitch [Y轴]", -90, 90, "right_arm", "Y"),
+            ("right_roll", "右臂 Roll [X轴]", -45, 45, "right_arm", "X"),
+        ]
+        
+        self.sliders = {}
+        
+        for jid, label, mn, mx, group, axis in joints:
+            if group not in self.pivots:
+                continue
+            
+            row = QtWidgets.QWidget()
+            rl = QtWidgets.QHBoxLayout(row)
+            rl.setContentsMargins(5, 3, 5, 3)
+            
+            lbl = QtWidgets.QLabel(label)
+            lbl.setMinimumWidth(140)
+            lbl.setStyleSheet("font-weight: bold;")
+            rl.addWidget(lbl)
+            
+            slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            slider.setRange(int(mn * 10), int(mx * 10))
+            slider.setValue(0)
+            rl.addWidget(slider)
+            
+            val = QtWidgets.QLabel("0.0°")
+            val.setFixedWidth(50)
+            val.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            rl.addWidget(val)
+            
+            btn = QtWidgets.QPushButton("归零")
+            btn.setFixedWidth(45)
+            btn.clicked.connect(lambda c=False, s=slider: s.setValue(0))
+            rl.addWidget(btn)
+            
+            layout.addWidget(row)
+            
+            slider.valueChanged.connect(
+                lambda v, g=group, a=axis, vl=val: self.rotate_group(g, a, v/10.0, vl)
+            )
+            
+            self.sliders[jid] = (slider, val, group, axis)
+        
+        layout.addStretch()
+        
+        # 底部按钮
+        btn_row = QtWidgets.QWidget()
+        bl = QtWidgets.QHBoxLayout(btn_row)
+        
+        br = QtWidgets.QPushButton("全部归零")
+        br.clicked.connect(self.reset_all)
+        bl.addWidget(br)
+        
+        bl.addStretch()
+        
+        bc = QtWidgets.QPushButton("关闭")
+        bc.clicked.connect(self.close)
+        bl.addWidget(bc)
+        
+        layout.addWidget(btn_row)
+    
+    def get_group_parts(self, group):
+        """获取组对应的零件名列表"""
+        mapping = {
+            "body": BODY_PARTS,
+            "head": HEAD_PARTS,
+            "left_arm": LEFT_ARM_PARTS,
+            "right_arm": RIGHT_ARM_PARTS,
+        }
+        return mapping.get(group, [])
+    
+    def rotate_group(self, group, axis, angle, label):
+        """旋转一个零件组"""
+        self.angles[f"{group}_{axis}"] = angle
+        label.setText(f"{angle:.1f}°")
+        self.apply_rotations()
+    
+    def apply_rotations(self):
+        """应用所有旋转"""
+        # 先全部恢复到初始位置
+        for child in self.shell.OutList:
+            if child.Name in self.init_placements:
+                child.Placement = Placement(self.init_placements[child.Name])
+        
+        # 再依次应用各组的旋转
+        for group, pivot in self.pivots.items():
+            ax = self.angles.get(f"{group}_X", 0)
+            ay = self.angles.get(f"{group}_Y", 0)
+            az = self.angles.get(f"{group}_Z", 0)
+            
+            if ax == 0 and ay == 0 and az == 0:
+                continue
+            
+            # 构建复合旋转: Z -> Y -> X
+            rot = Rotation()
+            if az != 0:
+                rot = Rotation(Vector(0, 0, 1), az) * rot
+            if ay != 0:
+                rot = Rotation(Vector(0, 1, 0), ay) * rot
+            if ax != 0:
+                rot = Rotation(Vector(1, 0, 0), ax) * rot
+            
+            # 对该组的每个零件施加绕 pivot 的旋转
+            for pname in self.get_group_parts(group):
+                obj = self.doc.getObject(pname)
+                if obj is None:
+                    continue
+                
+                init = self.init_placements.get(pname)
+                if init is None:
+                    continue
+                
+                # 零件当前位置
+                pos = init.Base
+                
+                # 相对 pivot 的位置
+                rel = pos - pivot
+                
+                # 旋转后的位置
+                new_pos = rot.multVec(rel) + pivot
+                new_rot = rot * init.Rotation
+                
+                obj.Placement = Placement(new_pos, new_rot)
+        
+        self.doc.recompute()
+        try:
+            Gui.ActiveDocument.ActiveView.redraw()
+        except:
+            pass
+    
+    def reset_all(self):
+        for jid, (slider, val, group, axis) in self.sliders.items():
+            slider.setValue(0)
+        self.angles.clear()
+        self.apply_rotations()
+    
+    def closeEvent(self, e):
+        self.reset_all()
+        e.accept()
+
+
+# ============================================================
+# 入口
+# ============================================================
+doc = App.ActiveDocument
+if doc is None:
+    App.Console.PrintError("请先打开 cadelectron.FCStd\n")
+else:
+    App.Console.PrintMessage("启动 electronBot 关节控制 v4...\n")
+    dlg = JointController(doc)
+    dlg.exec_()

@@ -1,0 +1,373 @@
+# -*- coding: utf-8 -*-
+"""
+electronBot 自动装配宏 for FreeCAD
+自动检测关节、设置 Assembly4、让关节动起来
+
+使用方法：
+1. 打开 FreeCAD
+2. 菜单 → 宏 → 宏... → 创建 → 命名 "electronBot_assembly" → 粘贴此文件内容
+3. 点击 "执行" 运行
+
+或者：
+直接将此文件拖入 FreeCAD 窗口即可
+"""
+
+import FreeCAD as App
+import FreeCADGui as Gui
+import Part
+import math
+import time
+
+# ============================================================
+# 第 1 步：确保 Assembly4 工作台已安装
+# ============================================================
+def ensure_assembly4():
+    """检查并安装 Assembly4 工作台"""
+    try:
+        import Asm4_libs
+        App.Console.PrintMessage("[OK] Assembly4 已安装\n")
+        return True
+    except ImportError:
+        App.Console.PrintMessage("[!] Assembly4 未安装，正在安装...\n")
+        try:
+            import AddonManager
+            AddonManager.InstallWorkbench("Assembly4")
+            App.Console.PrintMessage("[OK] Assembly4 安装完成，请重启 FreeCAD 后再次运行此宏\n")
+        except Exception as e:
+            App.Console.PrintError(f"[错误] 自动安装失败: {e}\n")
+            App.Console.PrintMessage("请手动安装: 工具 → 插件管理器 → 搜索 Assembly4 → 安装\n")
+        return False
+
+# ============================================================
+# 第 2 步：导入 STEP 文件
+# ============================================================
+def import_step(step_path):
+    """导入 STEP 文件"""
+    App.Console.PrintMessage(f"正在导入: {step_path}\n")
+    try:
+        # 使用 Import 模块
+        import Import
+        Import.insert(step_path, App.ActiveDocument.Name)
+        App.Console.PrintMessage("[OK] STEP 导入完成\n")
+        # 重新计算文档
+        App.ActiveDocument.recompute()
+        return True
+    except Exception as e:
+        App.Console.PrintError(f"[错误] 导入失败: {e}\n")
+        return False
+
+# ============================================================
+# 第 3 步：分析零件，找到所有圆柱面（候选关节轴）
+# ============================================================
+def find_cylindrical_features():
+    """
+    遍历所有零件，找出所有圆柱面。
+    圆柱面通常对应关节旋转轴。
+    """
+    doc = App.ActiveDocument
+    cylinders = []
+    
+    total_objects = len(doc.Objects)
+    count = 0
+    
+    for obj in doc.Objects:
+        count += 1
+        if count % 50 == 0:
+            App.Console.PrintMessage(f"  分析中... {count}/{total_objects}\n")
+        
+        # 跳过非 Part::Feature 对象
+        if not obj.isDerivedFrom("Part::Feature"):
+            continue
+        
+        if not hasattr(obj, 'Shape') or obj.Shape is None:
+            continue
+        
+        try:
+            shape = obj.Shape
+            
+            # 检查是否为圆柱体或包含圆柱面
+            for face in shape.Faces:
+                if face.Surface and hasattr(face.Surface, 'Radius'):
+                    surface = face.Surface
+                    # 是圆柱面
+                    radius = surface.Radius
+                    axis = surface.Axis
+                    center = surface.Center
+                    
+                    cylinders.append({
+                        'object': obj.Name,
+                        'label': obj.Label,
+                        'radius': radius,
+                        'axis': (axis.x, axis.y, axis.z),
+                        'center': (center.x, center.y, center.z),
+                        'face': face,
+                    })
+        except Exception:
+            continue
+    
+    return cylinders
+
+def group_joint_candidates(cylinders):
+    """
+    将圆柱面按空间位置分组，找到最可能的关节轴位置
+    关节轴特征：有较大的圆柱面（螺丝孔、轴孔），且在不同零件间共享同一轴线
+    """
+    if not cylinders:
+        return []
+    
+    # 按位置聚类（5mm 容差）
+    groups = []
+    used = set()
+    
+    for i, c1 in enumerate(cylinders):
+        if i in used:
+            continue
+        
+        group = [c1]
+        used.add(i)
+        
+        for j, c2 in enumerate(cylinders):
+            if j in used:
+                continue
+            
+            # 比较中心位置
+            d = math.sqrt(
+                (c1['center'][0] - c2['center'][0])**2 +
+                (c1['center'][1] - c2['center'][1])**2 +
+                (c1['center'][2] - c2['center'][2])**2
+            )
+            
+            if d < 5.0:  # 5mm 以内认为是同一位置
+                group.append(c2)
+                used.add(j)
+        
+        if len(group) >= 2:  # 至少 2 个圆柱面共享同一位置 = 关节
+            groups.append(group)
+    
+    # 按圆柱数量排序，最多的最可能是主要关节
+    groups.sort(key=lambda g: len(g), reverse=True)
+    
+    return groups
+
+# ============================================================
+# 第 4 步：获取 Assembly4 库
+# ============================================================
+def get_asm4():
+    """获取 Assembly4 模块"""
+    import Asm4_libs as Asm4
+    return Asm4
+
+# ============================================================
+# 第 5 步：创建装配体
+# ============================================================
+def create_assembly(groups):
+    """
+    创建 Assembly4 装配体结构
+    """
+    doc = App.ActiveDocument
+    Asm4 = get_asm4()
+    
+    # 创建装配体 Model
+    model_name = "electronBot_Assembly"
+    model = doc.getObject(model_name)
+    if model is None:
+        model = Asm4.makeAssembly(doc, model_name)
+        App.Console.PrintMessage(f"[OK] 创建装配体: {model_name}\n")
+    
+    # 创建主要子装配
+    parts = {
+        'Base': '底座',
+        'Body': '身体',
+        'Head': '头部',
+        'LeftArm': '左臂',
+        'RightArm': '右臂',
+    }
+    
+    sub_assemblies = {}
+    for key, label in parts.items():
+        part_obj = doc.getObject(key)
+        if part_obj is None:
+            part_obj = Asm4.makePart(doc, key)
+            part_obj.Label = label
+        sub_assemblies[key] = part_obj
+    
+    App.Console.PrintMessage(f"[OK] 创建了 {len(sub_assemblies)} 个子装配体\n")
+    
+    # 列出已找到的关节候选位置
+    App.Console.PrintMessage("\n" + "="*60 + "\n")
+    App.Console.PrintMessage("检测到以下关节候选位置:\n")
+    for i, group in enumerate(groups[:6]):
+        c = group[0]
+        App.Console.PrintMessage(
+            f"  关节 {i+1}: 中心=({c['center'][0]:.1f}, {c['center'][1]:.1f}, {c['center'][2]:.1f}), "
+            f"轴=({c['axis'][0]:.2f}, {c['axis'][1]:.2f}, {c['axis'][2]:.2f}), "
+            f"半径={c['radius']:.1f}mm\n"
+        )
+    App.Console.PrintMessage("="*60 + "\n")
+    
+    return sub_assemblies
+
+# ============================================================
+# 第 6 步：在关节位置创建 LCS
+# ============================================================
+def create_joint_lcs(sub_assemblies, groups):
+    """在每个关节位置创建局部坐标系"""
+    doc = App.ActiveDocument
+    
+    # 关节定义（手动映射检测到的组到机器人关节）
+    joint_configs = [
+        {'name': 'Joint_Body', 'part': 'Body', 'parent': 'Base', 'desc': '腰部旋转'},
+        {'name': 'Joint_Head', 'part': 'Head', 'parent': 'Body', 'desc': '头部俯仰'},
+        {'name': 'Joint_LArm_Pitch', 'part': 'LeftArm', 'parent': 'Body', 'desc': '左臂 Pitch'},
+        {'name': 'Joint_LArm_Roll', 'part': 'LeftArm', 'parent': 'Body', 'desc': '左臂 Roll'},
+        {'name': 'Joint_RArm_Pitch', 'part': 'RightArm', 'parent': 'Body', 'desc': '右臂 Pitch'},
+        {'name': 'Joint_RArm_Roll', 'part': 'RightArm', 'parent': 'Body', 'desc': '右臂 Roll'},
+    ]
+    
+    lcs_objects = []
+    for i, config in enumerate(joint_configs):
+        if i < len(groups):
+            group = groups[i]
+            c = group[0]
+            center = c['center']
+            axis = c['axis']
+            
+            part_name = config['part']
+            part = sub_assemblies.get(part_name)
+            if part is None:
+                continue
+            
+            # 在零件中创建 LCS
+            lcs = part.newObject('PartDesign::CoordinateSystem', config['name'])
+            lcs.Label = config['desc']
+            
+            # 设置 LCS 位置和方向
+            placement = App.Placement()
+            placement.Base = App.Vector(*center)
+            
+            # 旋转轴对齐到 Z 轴
+            z_axis = App.Vector(0, 0, 1)
+            joint_axis = App.Vector(*axis)
+            
+            if abs(joint_axis.dot(z_axis)) < 0.99:
+                # 需要旋转对齐
+                rot_axis = z_axis.cross(joint_axis)
+                if rot_axis.Length > 1e-6:
+                    rot_axis.normalize()
+                    angle = math.acos(joint_axis.dot(z_axis))
+                    placement.Rotation = App.Rotation(rot_axis, math.degrees(angle))
+            
+            lcs.Placement = placement
+            lcs_objects.append(lcs)
+            
+            App.Console.PrintMessage(
+                f"[OK] {config['desc']}: LCS 创建于 ({center[0]:.1f}, {center[1]:.1f}, {center[2]:.1f})\n"
+            )
+    
+    doc.recompute()
+    return lcs_objects
+
+# ============================================================
+# 第 7 步：设置装配约束
+# ============================================================
+def setup_assembly_links(sub_assemblies, lcs_objects):
+    """
+    使用 Assembly4 创建零件之间的连接
+    """
+    doc = App.ActiveDocument
+    Asm4 = get_asm4()
+    model = doc.getObject("electronBot_Assembly")
+    
+    if model is None:
+        App.Console.PrintError("[错误] 找不到装配体 Model\n")
+        return
+    
+    # 将子装配体插入主装配体
+    for key, part in sub_assemblies.items():
+        if part is not None and part not in model.Group:
+            try:
+                model.addObject(part)
+                App.Console.PrintMessage(f"[OK] {part.Label} 已添加到装配体\n")
+            except Exception as e:
+                App.Console.PrintError(f"[错误] 添加 {key} 失败: {e}\n")
+    
+    doc.recompute()
+
+# ============================================================
+# 第 8 步：保存
+# ============================================================
+def save_result():
+    """保存装配体文件"""
+    import os
+    save_path = os.path.expanduser("~/Desktop/electronBot_assembly.FCStd")
+    try:
+        App.ActiveDocument.saveAs(save_path)
+        App.Console.PrintMessage(f"\n[完成] 装配体已保存到: {save_path}\n")
+    except Exception as e:
+        App.Console.PrintError(f"[错误] 保存失败: {e}\n")
+
+# ============================================================
+# 主函数
+# ============================================================
+def main():
+    App.Console.PrintMessage("\n" + "="*60 + "\n")
+    App.Console.PrintMessage("  electronBot 自动装配工具\n")
+    App.Console.PrintMessage("="*60 + "\n\n")
+    
+    # 检查 Assembly4
+    if not ensure_assembly4():
+        return
+    
+    # 检查是否已有文档打开
+    if App.ActiveDocument is None:
+        step_path = r"d:/lht/机器人/xiaozhi/electronbot-docs/docs/cad/ElectronBot.step"
+        import os
+        if not os.path.exists(step_path):
+            App.Console.PrintError(f"[错误] 找不到 STEP 文件: {step_path}\n")
+            App.Console.PrintMessage("请先将 ElectronBot.step 拖入 FreeCAD 窗口，然后运行此宏\n")
+            return
+        
+        # 创建新文档
+        doc = App.newDocument("electronBot")
+        # 导入 STEP
+        if not import_step(step_path):
+            return
+    else:
+        App.Console.PrintMessage("[OK] 使用当前打开的文档\n")
+    
+    time.sleep(1)
+    App.ActiveDocument.recompute()
+    
+    # 分析圆柱面特征
+    App.Console.PrintMessage("\n正在分析零件几何结构...\n")
+    cylinders = find_cylindrical_features()
+    App.Console.PrintMessage(f"[OK] 找到 {len(cylinders)} 个圆柱面\n")
+    
+    # 分组关节候选
+    App.Console.PrintMessage("正在检测关节位置...\n")
+    groups = group_joint_candidates(cylinders)
+    App.Console.PrintMessage(f"[OK] 检测到 {len(groups)} 个可能的关节位置\n")
+    
+    # 创建装配体结构
+    sub_assemblies = create_assembly(groups)
+    
+    # 创建关节 LCS
+    lcs_objects = create_joint_lcs(sub_assemblies, groups)
+    
+    # 设置装配连接
+    setup_assembly_links(sub_assemblies, lcs_objects)
+    
+    # 保存
+    save_result()
+    
+    App.Console.PrintMessage("\n" + "="*60 + "\n")
+    App.Console.PrintMessage("""
+接下来你可以：
+1. 在 Assembly4 工作台中，双击每个 LCS 调整位置
+2. 选中关节零件 → 右键 → Transform → 旋转即可测试关节运动
+3. 使用 Assembly4 的 Animate 功能录制运动
+================================================================
+""")
+
+if __name__ == "__main__":
+    main()

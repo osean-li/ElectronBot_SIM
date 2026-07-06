@@ -319,7 +319,7 @@ SCENE_MESH_TEMPLATE = '''<!--
 def main():
     parser = argparse.ArgumentParser(description="STL → MuJoCo inline mesh XML")
     parser.add_argument("--input", default="assets/meshes")
-    parser.add_argument("--output", default="assets/mjcf/electronbot_mesh.xml")
+    parser.add_argument("--output", default="assets/mjcf/electronbot_full_arm.xml")
     parser.add_argument("--no-scene", action="store_true", help="不生成 scene 文件")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

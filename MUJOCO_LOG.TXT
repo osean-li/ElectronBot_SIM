@@ -1,0 +1,28 @@
+ERROR Sun Jul  5 16:55:32 2026: could not initialize GLFW
+
+ERROR Sun Jul  5 16:55:39 2026: could not initialize GLFW
+
+ERROR Sun Jul  5 17:35:47 2026: could not initialize GLFW
+
+ERROR Sun Jul  5 17:35:55 2026: could not initialize GLFW
+
+ERROR Sun Jul  5 17:37:23 2026: could not initialize GLFW
+
+ERROR Sun Jul  5 17:41:59 2026: could not initialize GLFW
+
+ERROR Sun Jul  5 23:29:31 2026: could not initialize GLFW
+
+ERROR Mon Jul  6 16:27:46 2026: could not initialize GLFW
+
+ERROR Mon Jul  6 16:28:15 2026: could not initialize GLFW
+
+ERROR Mon Jul  6 16:28:50 2026: could not initialize GLFW
+
+ERROR Mon Jul  6 16:28:56 2026: could not initialize GLFW
+
+ERROR Mon Jul  6 16:29:52 2026: could not initialize GLFW
+
+ERROR Mon Jul  6 16:30:10 2026: could not initialize GLFW
+
+ERROR mjv_updateCamera (engine_vis_visualize.c:2959) Mon Jul  6 16:53:40 2026: track body id is outside valid range
+

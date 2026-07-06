@@ -149,7 +149,7 @@ def validate_model(model_path: str) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="验证 ElectronBot MJCF 模型")
-    parser.add_argument("model", nargs="?", default="assets/mjcf/scene_tabletop.xml",
+    parser.add_argument("model", nargs="?", default="assets/mjcf/electronbot_full_arm.xml",
                         help="MJCF 模型路径")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

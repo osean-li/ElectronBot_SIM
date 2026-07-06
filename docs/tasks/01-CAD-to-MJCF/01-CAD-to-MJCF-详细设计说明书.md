@@ -2,893 +2,613 @@
 
 > **目标**：从 ElectronBot.step 原始 CAD 模型出发，提取零件几何体、质量/惯量、关节参数，生成 MuJoCo 可用的 MJCF 格式物理模型。
 >
-> **输入**：`xiaozhi-electronbot-docs/docs/cad/ElectronBot.step`（30.5MB，24 个零件）
+> **输入**：`assets/cad/ElectronBot.step`（30.5MB，24 个零件）
 >
 > **输出**：
-> - `assets/mjcf/electronbot_mesh.xml`——inline mesh 版（~500 fps，CAD 真实外形）
+> - `assets/mjcf/electronbot_full_arm.xml`——inline mesh 版，CAD 真实外形
 >
-> **文档版本**: v1.2  
-> **最后更新**: 2026-07-04  
-> **变更类型**: 移除几何基元版，统一使用 inline mesh 版
+> **文档版本**: v2.0  
+> **最后更新**: 2026-07-06  
+> **变更类型**: 根据实际实现重写——5 组 STL 合并导出（按 FreeCAD 运动组），非 24 零件独立导出
 
 ---
 
-## 1. 预期效果
+## 前置说明：CAD、STL、XML 都是什么
 
-### 1.1 文件结构
+### 先看最终产物长什么样
 
-```
-assets/mjcf/
-├── electronbot_mesh.xml     ← inline mesh 版: CAD STL 真实外形 (~500 fps)
-├── scene_mesh.xml           ← 场景外壳 include electronbot_mesh.xml
-└── scene_tabletop.xml       ← 桌面场景 (含桌面碰撞体)
-```
-
-| 文件 | 用途 | fps | 文件大小 |
-|------|------|:---:|------|
-| electronbot_mesh.xml | 仿真+展示、真机效果预览 | ~500 | ~12MB 单文件 |
-
-```
-$ python scripts/validate_model.py
-✅  electronbot.xml 加载成功
-✅  24 个 body 定义完成
-✅  6 个 joint 定义完成 (type=hinge, range 正确)
-✅  6 个 actuator 定义完成 (gear 映射比正确)
-✅  碰撞几何体生成完毕 (最大面数 < 200)
-✅  惯性矩阵计算完毕 (总质量 ≈ 95g)
-✅  MuJoCo viewer 中可拖拽视角观察
-```
-
-### 1.2 可视化验证标准
-
-在 MuJoCo viewer 中打开 `electronbot_mesh.xml`，应看到：
-
-```
-- 完整机器人模型，近似白色 PLA 材质外观
-- 6 个关节可以独立拖动（通过 viewer 的 actuator slider）
-- 拖动头部 joint → 头部绕 Y 轴俯仰（±30°）
-- 拖动身体 joint → 腰部绕 Z 轴旋转（±90°）
-- 拖动右臂 pitch joint → 右臂举起/放下（±90°）
-- 模型不会自我穿透（碰撞体正确）
-- 零件位置、比例与真机照片一致
-```
-
----
-
-## 2. 建模参数——从代码推算的精确数值
-
-### 2.1 24 个零件分组
-
-从 FreeCAD 装配结构分析，24 个零件分为 5 个运动组：
-
-| 组 | 零件数 | MuJoCo body 名 | 父 body | 运动类型 |
-|----|:---:|------|------|------|
-| 底座 (base) | 2 | `base` | world | 固定不动 |
-| 身体 (body) | 3 | `torso` | base | 绕 Z 轴旋转 |
-| 头部 (head) | 5 | `head` | torso | 绕 Y 轴俯仰 |
-| 左臂 (left_arm) | 6 | `left_arm` | torso | Pitch+Roll |
-| 右臂 (right_arm) | 7 | `right_arm` | torso | Pitch+Roll |
-
-### 2.2 各零件体积（从 FreeCAD 宏注释中提取）
-
-```
-Part__Feature043 (底座)    : vol ≈ 21440 mm³
-Part__Feature044 (底座底)   : vol ≈ 8198  mm³
-Part__Feature034 (身体中心)  : vol ≈ 16545 mm³
-Part__Feature035 (身体右侧)  : vol ≈ 18741 mm³
-Part__Feature036 (身体左侧)  : vol ≈ 18652 mm³
-Part__Feature037 (前脸)     : vol ≈ 2428  mm³
-Part__Feature038 (头顶)     : vol ≈ 9195  mm³
-Part__Feature039 (头部主壳)  : vol ≈ 14318 mm³
-```
-
-> 其余零件体积未标注，用 CAD 软件自动计算。
-
-**质量计算**：PLA 密度 1.24 g/cm³
-
-```
-底座组总质量 ≈ (21440 + 8198) / 1000 * 1.24 ≈ 36.8g
-身体组总质量 ≈ (16545 + 18741 + 18652) / 1000 * 1.24 ≈ 66.9g
-头部组总质量 ≈ (2428 + 9195 + 14318 + 其他2件) / 1000 * 1.24 ≈ 32.0g
-双臂组总质量 ≈ 每个臂约 8-12g
-总质量估计 ≈ 95-110g（不含舵机、PCB、电池等电子件）
-```
-
-> 仿真中需加上舵机、PCB、电池的附加质量。SG90 约 9g，2g 舵机约 2g，电池约 18g，PCB 约 10g，
-> 总附加质量约 60g。**完整机器人总质量约 160g。**
-
-### 2.3 关节参数——关键数据
-
-#### 2.3.1 旋转中心坐标（从 FreeCAD 宏提取）
-
-| 关节 | MuJoCo body | 旋转中心 (x, y, z) mm | 旋转轴 |
-|------|-------------|----------------------|--------|
-| body | torso | ≈ (0, 0, -6) | Z |
-| head | head | ≈ (3, 0, 25) | Y |
-| left_arm | left_arm | ≈ (-17, 0, 0) | Y / X |
-| right_arm | right_arm | ≈ (17, 0, 0) | Y / X |
-
-#### 2.3.2 舵机→机械关节映射比（从固件安全范围 ← → CAD 机械范围推算）
-
-| 关节 | 固件舵机安全范围 | 中心 | CAD 机械范围 | **映射比** | 方向 |
-|------|:---:|:---:|:---:|:---:|:---:|
-| HEAD | 75° ~ 105°（30°） | 90° | ±30°（60°） | **2.0** | 正向 |
-| BODY | 30° ~ 150°（120°） | 90° | ±90°（180°） | **1.5** | 正向 |
-| RIGHT_PITCH | 0° ~ 180°（180°） | 180→0 | ±90°（180°） | **1.0** | **反向** |
-| LEFT_PITCH | 0° ~ 180°（180°） | 0→180 | ±90°（180°） | **1.0** | 正向 |
-| RIGHT_ROLL | 100° ~ 180°（80°） | 140 | ±45°（90°） | **1.125** | **反向** |
-| LEFT_ROLL | 0° ~ 80°（80°） | 40 | ±45°（90°） | **1.125** | 正向 |
-
-> 映射比 = CAD 机械范围 / 固件舵机范围  
-> 反向表示：舵机角度增大 → 机械关节角度减小（右手坐标系约定下）
-
-**舵机初始位置 → MuJoCo 初始关节角度转换：**
-
-```python
-# 真机舵机初始值（来自 movements.h）
-servo_initial = [180, 180, 0, 0, 90, 90]  # RP, RR, LP, LR, BODY, HEAD
-
-# 中心值
-center   = [180, 140, 0, 40, 90, 90]
-ratio    = [1.0, 1.125, 1.0, 1.125, 1.5, 2.0]
-direction = [-1, -1, 1, 1, 1, 1]  # -1=反向
-
-# 计算 MuJoCo 初始关节角度：
-# offset = (servo_angle - center) * ratio * direction
-# RP:  (180-180) * 1.0 * -1 = 0°
-# RR:  (180-140) * 1.125 * -1 = -45°  ← 右臂 Roll 在 MuJoCo 中初始 -45°
-# LP:  (0-0) * 1.0 * 1 = 0°
-# LR:  (0-40) * 1.125 * 1 = -45°     ← 左臂 Roll 初始 -45°
-# BODY:(90-90) * 1.5 * 1 = 0°
-# HEAD:(90-90) * 2.0 * 1 = 0°
-```
-
-> 注意：RR/LR 的舵机初始值 180/0 不等于机械中心 140/40，所以初始状态手臂 Roll 并非居中。
-> 这是预定义的"休息姿态"——手臂自然下垂时 Roll 处于极限位置。
-
----
-
-## 3. 实现步骤
-
-### Step 1：CAD 零件导出到 STL → 生成 inline mesh XML
-
-> ⚠️ **关键教训**：STL 文件使用毫米单位，MuJoCo 按米解析会导致惯性放大 10¹² 倍，关节卡死。
-> **正确做法**：保持 STL 原始 mm 单位不变，用控制器参数适配大惯量。
+当你成功运行下面的命令时：
 
 ```bash
-# 1. FreeCAD 导出 STL
-# 打开 cadelectron.FCStd → 每个零件 → 导出 → STL Mesh → assets/meshes/
-
-# 2. 生成 inline mesh XML（核心创新）
-python scripts/generate_inline_mesh.py
-
-# 脚本核心逻辑: 从 STL 读取顶点/面，编码为字符串嵌入 MJCF
-# 输出: assets/mjcf/electronbot_mesh.xml (不依赖文件系统，零外部文件)
+cd ElectronBot_SIM
+python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml
 ```
 
-**generate_inline_mesh.py 核心代码参考：**
+MuJoCo viewer 中出现的那个机器人模型，就是一个 **XML 文件** 描述的。这个过程的本质是：
 
-```python
-import trimesh, struct, base64, xml.etree.ElementTree as ET
-
-def stl_to_inline_mesh(stl_path: str) -> tuple[str, str]:
-    """STL → MuJoCo inline mesh 的 vertex/face 字符串"""
-    mesh = trimesh.load(stl_path)
-    # 顶点: 二进制编码后 base64
-    verts = base64.b64encode(mesh.vertices.astype('<f4').tobytes()).decode()
-    # 面: uint32 编码后 base64
-    faces = base64.b64encode(mesh.faces.astype('<i4').tobytes()).decode()
-    return verts, faces
+```
+CAD（图纸）  →  STL（模型）  →  XML（仿真描述）
 ```
 
-**Inline mesh XML 示例：**
+### 三种文件分别是什么
+
+| 文件格式 | 是什么 | 管什么 | 怎么来的 | 能直接看吗 |
+|----------|--------|--------|----------|-----------|
+| **CAD (.step / .FCStd)** | 工程师画的**原始设计图纸**，包含 24 个零件的精确尺寸、装配关系 | 告诉你有哪些零件、它们长什么样、怎么组装在一起 | 从 稚晖君 ElectronBot 开源项目获取 | 需要用 FreeCAD / SolidWorks 等 CAD 软件打开 |
+| **STL (.stl)** | **3D 模型的表面网格**，只保存三角形顶点坐标，没有颜色/材质/装配信息 | 保存机器人每个部分的**外形**，给 MuJoCo 做碰撞和外观显示用 | 从 CAD 软件导出 | 大部分 3D 查看器都能打开 |
+| **XML (.xml, MJCF)** | **MuJoCo 的模型描述文件**，纯文本格式，描述机器人有哪些刚体、关节、执行器、传感器 | 定义机器人**怎么动**：关节轴方向、旋转范围、舵机参数、物理属性 | 由 Python 脚本把 STL 数据内嵌到 XML 模板中 | 任何文本编辑器都能打开 |
+
+### 一句话理解
+
+```
+CAD 是"设计图" → 导出零件的三维外形得到 STL → 把 STL 的外形数据 + 手工编写的关节参数填入 XML → MuJoCo 加载 XML 就能仿真
+```
+
+### 转换过程全景
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                    ElectronBot.STEP (CAD 原始文件, 30MB)                │
+│                    24 个零件, 来自稚晖君开源项目                          │
+└──────────────────────┬────────────────────────────────────────────────┘
+                       │
+                       ▼  用 FreeCAD 打开
+┌───────────────────────────────────────────────────────────────────────┐
+│                FreeCAD 中确认零件分组 (关键步骤)                          │
+│                                                                         │
+│  通过 electronbot_joints.FCMacro 宏确定哪个零件属于哪个运动组:             │
+│                                                                         │
+│  底座组 (不动)     身体组 (绕Z转)     头部组 (绕Y俯仰)   左臂组   右臂组    │
+│  ┌──────────┐    ┌──────────────┐   ┌──────────────┐  ┌────┐  ┌────┐  │
+│  │ Part_043 │    │ Part_034     │   │ Part_037~041 │  │6件 │  │7件 │  │
+│  │ Part_044 │    │ Part_035 ←──┼┐  │ (5个零件)     │  │    │  │    │  │
+│  │          │    │ Part_036 ←──┼┤  │              │  │    │  │    │  │
+│  └──────────┘    └──────────────┘│  └──────────────┘  └────┘  └────┘  │
+│              ⚠️ 关键: 035/036是身体 |                                    │
+│              外壳, 不属于手臂!   |                                       │
+└──────────────────────────────────┼─────────────────────────────────────┘
+                                   │
+                                   ▼  按运动组合并导出 STL
+┌───────────────────────────────────────────────────────────────────────┐
+│               assets/meshes/ 目录 (5 个 STL 文件)                       │
+│                                                                         │
+│  base_link.stl    body.stl     head.stl    left_arm.stl  right_arm.stl │
+│  (底座2零件合并)  (身体3零件)   (头部5零件)  (左臂6零件)   (右臂7零件)   │
+│  ~1.1MB           ~364KB       ~713KB      ~850KB        ~317KB       │
+└──────────────────────┬────────────────────────────────────────────────┘
+                       │
+                       ▼  运行 generate_inline_mesh.py
+┌───────────────────────────────────────────────────────────────────────┐
+│  python scripts/generate_inline_mesh.py \                              │
+│      --input assets/meshes \                                           │
+│      --output assets/mjcf/electronbot_full_arm.xml                     │
+│                                                                         │
+│  脚本做的事 (重点):                                                      │
+│  1. 读取 5 个 STL 的三角形顶点数据                                        │
+│  2. 把顶点坐标转为字符串, 内嵌到 XML 的 <mesh> 标签里                      │
+│  3. 同时生成 <body> <joint> <actuator> 等仿真描述                        │
+│                                                                         │
+│  最终产物是一个 XML 文件, 内部包含了:                                     │
+│  ├── 5 组 STL 的几何数据 (内联 mesh, ~1.7MB 都在一个文件里)                 │
+│  ├── 7 个刚体的层次结构 (base→body→head/left_arm/right_arm)             │
+│  ├── 6 个关节的定义 (轴方向、旋转范围)                                    │
+│  ├── 6 个执行器的参数 (舵机型号对应的 kp/kv)                              │
+│  └── 传感器定义                                                         │
+└──────────────────────┬────────────────────────────────────────────────┘
+                       │
+                       ▼  python3 -m mujoco.viewer ...
+┌───────────────────────────────────────────────────────────────────────┐
+│                MuJoCo viewer 中加载 XML 后:                              │
+│                                                                         │
+│  1. 解析 <mesh> → 重建 3D 模型外形                                        │
+│  2. 解析 <body> → 建立刚体父子关系                                         │
+│  3. 解析 <joint> → 确定每个关节怎么转                                      │
+│  4. 解析 <actuator> → 可以拖动滑块控制舵机                                  │
+│  5. 开始仿真 → 物理引擎驱动机器人运动                                       │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+### 你不需要关心哪些
+
+- **不需要手动编辑 XML**：`electronbot_full_arm.xml` 有 1.7MB，是脚本自动生成的。你要改的是上游（CAD 零件分组或 STL 网格），然后重新跑脚本
+- **不需要理解 CAD 软件**：零件分组已经在 `assets/cad/electronbot_joints.FCMacro` 中确认，直接使用即可
+- **不需要手动处理 STL**：STL 是中间产物，由 CAD 导出后，脚本自动处理
+
+你只需要知道：
+- **修改机器人外形** → 改 CAD 图纸，重新导出 STL
+- **修改关节参数** → 改 `generate_inline_mesh.py` 脚本中的模板
+- **修改舵机 kp/kv** → 改 `update_actuator.py` 脚本中的参数
+- **验证效果** → `python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml`
+
+---
+
+### 为什么选择 inline mesh 而不是外部 STL 引用
+
+**一句结论：外部 STL 可以加载，但有路径和单位两个坑要填，inline mesh 自动避开了。**
+
+#### 两种方案对比
 
 ```xml
+<!-- 方式 A：外部 STL 引用（能行，但要填坑） -->
+<compiler meshscale="0.001"/>            <!-- 坑1：STL 毫米→米缩放 -->
+<mesh name="body" file="../meshes/body.stl"/>  <!-- 坑2：路径要写对 -->
+
+<!-- 方式 B：inline mesh（当前方案，一步到位） -->
+<mesh name="body" vertex="0.0012 0.0035 ..." face="0 1 2 ..."/> 
+<!-- 缩放和路径都已在脚本中处理，XML 自带数据 -->
+```
+
+#### 三个核心区别
+
+| 区别 | 外部 STL 引用 | inline mesh（当前方案） |
+|------|-------------|---------------------|
+| **路径** | MuJoCo 去 XML 同级目录找 `.stl` 文件，路径不对就加载空壳 | 顶点数据内嵌在 XML 中，**没有外部文件依赖** |
+| **单位** | STL 是毫米 (mm)，MuJoCo 当米 (m) 解析 → 模型放大 1000 倍，惯性爆炸 | 脚本提前做 `vertices * 0.001` mm→m 缩放，数值正确 |
+| **自动中心化** | 外部 STL **没有**自动中心化 → 手臂 `geom pos` 偏移量要重新手算 | MuJoCo 编译 inline mesh 时自动将几何中心移到 body 原点，`geom pos` 偏移可脚本自动计算 |
+
+#### 为什么 inline 对 ElectronBot 更合适
+
+1. **单文件可移植**：`electronbot_full_arm.xml` 自包含所有几何数据（~1.7MB），无需带着 5 个 STL 一起复制
+2. **自动处理单位**：解决了已知的 `mm → m` 大坑
+3. **自动处理位置偏移**：inline mesh 的自动中心化行为让脚本可以精确计算手臂 `geom pos` 偏移量
+4. **外部 STL 的唯一优势**——"改外形不用重新生成 XML"——在实践中几乎用不到，外形定了就是定了
+
+#### 如果你非要用外部 STL
+
+两件事必须做对：
+
+```xml
+<!-- 1. 加 meshscale -->
+<compiler angle="radian" autolimits="true" meshscale="0.001"/>
+
+<!-- 2. 路径要指向正确位置 -->
 <asset>
-  <mesh name="base_link"
-        vertex="AAAAQAAAAMEAAADC..."   <!-- 二进制顶点数据 base64 -->
-        face="AAAAAQAAAAIAAAAD..."/>   <!-- 二进制面数据 base64 -->
+  <mesh name="body" file="../meshes/body.stl"/>
 </asset>
 ```
 
-**优势**：不依赖文件系统、零外部文件、单文件可移植（~2MB）。
+但手臂的 `geom pos` 偏移量因为没有自动中心化，需要重新手动计算，不建议走这条路。
 
-### 🔴 关键教训：mm 单位控制器适配
+---
 
-STL 为 mm 单位时惯性被放大 10¹² 倍。**不要缩放 STL**（会导致 MuJoCo 自动重算顶点中心、位置错乱），用控制器参数适配：
+## 目录
+- [1. 实际实现概述](#1-实际实现概述)
+- [2. 从设计文档到实现：关键修正](#2-从设计文档到实现关键修正)
+- [3. 最终模型结构](#3-最终模型结构)
+- [4. 实现步骤](#4-实现步骤)
+- [5. 验证方法](#5-验证方法)
+- [6. 工程经验教训](#6-工程经验教训)
 
-```xml
-<!-- 几何基元版 (m 单位, 正常惯性) -->
-<joint damping="0.01" armature="0.001"/>
-<position kp="50" forcerange="-0.15 0.15"/>
+---
 
-<!-- inline mesh 版 (mm 单位, 大惯性) -->
-<joint damping="0.5" armature="0.01"/>          <!-- 防过阻尼 -->
-<position kp="500" kv="50" forcerange="-100 100"/>  <!-- 高增益 + 大力矩 -->
+## 1. 实际实现概述
+
+### 1.1 最终文件结构
+
+```
+assets/mjcf/
+└── electronbot_full_arm.xml     ← 唯一输出: inline mesh 版，CAD 真实外形
+
+assets/meshes/
+├── base_link.stl                 ← 底座（2 个 CAD 零件合并导出）
+├── body.stl                      ← 身体（3 个 CAD 零件合并导出，含侧外壳）
+├── head.stl                      ← 头部（5 个 CAD 零件合并导出）
+├── left_arm.stl                  ← 左臂（6 个 CAD 零件，纯手臂，不含侧外壳）
+└── right_arm.stl                 ← 右臂（7 个 CAD 零件，纯手臂，不含侧外壳）
 ```
 
-相机参数同步适配：
+### 1.2 可视化验证结果
 
-```python
-cam.lookat[:] = [0, 0, 50]   # mm 单位高度中心
-cam.distance = 200            # 适配 mm 级大模型
+```bash
+$ python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml
 ```
 
-### Step 2：计算惯性参数
+在 viewer 中可观察：
+- 完整机器人模型，CAD 真实外形（inline mesh）
+- 6 个关节可通过 actuator slider 独立拖动
+- 腰部（body_joint）：绕 Z 轴旋转 ±90°
+- 头部（head_joint）：绕 Y 轴俯仰 ±15°
+- 左臂 Pitch（left_pitch_joint）：绕 Y 轴 ±90°
+- 左臂 Roll（left_roll_joint）：绕 X 轴 ±45°
+- 右臂 Pitch（right_pitch_joint）：绕 Y 轴 ±90°
+- 右臂 Roll（right_roll_joint）：绕 X 轴 ±45°
+- 模型无穿透，仿真稳定（RK4 积分器）
 
-对每个 STL 文件，用脚本计算体积和惯性矩阵：
+---
 
-```python
-# scripts/calc_inertia.py
-import trimesh
-import numpy as np
+## 2. 从设计文档到实现：关键修正
 
-PLA_DENSITY = 1.24e-6  # g/mm³ → kg/mm³ for MuJoCo
+### 2.1 原始设计文档 vs 实际实现
 
-meshes = {
-    "base_top": "assets/meshes/base_top.stl",
-    # ... 全部 24 个零件
-}
+| 项目 | 原始设计文档（v1.2） | 实际实现（v2.0） |
+|------|---------------------|-----------------|
+| 输出文件名 | `electronbot_mesh.xml` | `electronbot_full_arm.xml` |
+| STL 导出方式 | 24 个 CAD 零件分别导出 | 按运动组合并导出为 5 组 |
+| body 命名 | `base/torso/head/left_arm/left_hand/right_arm/right_hand` | `base_link/body/head/left_arm/left_hand/right_arm/right_hand` |
+| 关节命名 | `joint_body/joint_head/joint_lp/joint_lr/joint_rp/joint_rr` | `body_joint/head_joint/left_pitch_joint/left_roll_joint/right_pitch_joint/right_roll_joint` |
+| 手臂运动轴 | 左臂 Pitch(0,1,0), Roll(1,0,0) | **左臂 Pitch(0,1,0), Roll(1,0,0)**（与文档一致） |
+| 积分器 | implicitfast | **RK4**（稳定性问题导致） |
+| actuator kp | 30-80（弧度制） | 30-80，与舵机规格匹配 |
+| 场景文件 | `scene_mesh.xml` + `scene_tabletop.xml` | **已删除**（不需要） |
+| 角色 | 几何基元版 + inline mesh 版两种 | **统一 inline mesh 版** |
 
-for name, path in meshes.items():
-    mesh = trimesh.load(path)
-    volume = mesh.volume  # mm³
-    mass = volume * PLA_DENSITY  # kg
-    inertia = mesh.moment_inertia * PLA_DENSITY  # 相对于质心
-    com = mesh.center_mass
-    
-    print(f"{name}: mass={mass*1000:.1f}g, com={com}")
-    # 输出格式可直接填入 MJCF
+### 2.2 关键 Bug 修复
+
+**根本问题**：原始 CAD 导出的 `left_arm.stl` / `right_arm.stl` 错误地将身体侧外壳零件（`Part__Feature035`/`036`）合并到了手臂 STL 中。
+
+**后果**：在 MuJoCo 中控制手臂 Pitch/Roll 时，身体侧外壳也跟着手臂一起运动。
+
+**解决方案**：
+1. 通过 FreeCAD 宏 `electronbot_joints.FCMacro` 确认正确的 CAD 零件分组
+2. 按 5 个运动组重新合并导出 STL：
+   - 底座组：`Part__Feature043` + `Part__Feature044`
+   - 身体组：`Part__Feature034` + `Part__Feature035` + `Part__Feature036`（侧外壳属于身体，不动）
+   - 头部组：5 个零件
+   - 左臂组：6 个零件（纯手臂，不含侧外壳）
+   - 右臂组：7 个零件（纯手臂，不含侧外壳）
+
+### 2.3 最终验证通过的命令
+
+```bash
+cd ElectronBot_SIM
+python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml
 ```
 
-### Step 3：生成 MJCF XML（inline mesh 版）
+---
 
-文件：`assets/mjcf/electronbot_mesh.xml`——由 `generate_inline_mesh.py` 自动生成。
+## 3. 最终模型结构
 
-核心结构（mm 单位，高增益控制器适配大惯量）：
+### 3.1 运动学树
+
+```
+world
+└── base_link (固定)
+    └── body [body_joint, Z轴 hinge, ±90°]
+        ├── head [head_joint, Y轴 hinge, ±15°]
+        ├── left_arm [left_pitch_joint, Y轴 hinge, ±90°]
+        │             [left_roll_joint,  X轴 hinge, ±45°]
+        │   └── left_hand (末端 box)
+        └── right_arm [right_pitch_joint, Y轴 hinge, ±90°]
+                       [right_roll_joint,  X轴 hinge, ±45°]
+            └── right_hand (末端 box)
+```
+
+**与原始设计文档的区别**：
+- 左/右臂直接挂在 body 下（无 `left_shoulder`/`right_shoulder` 中间 body）
+- 每臂 2 个关节（Pitch + Roll），共 6 自由度
+- 关节命名采用 `_pitch_joint` / `_roll_joint` 后缀
+
+### 3.2 完整 MJCF 结构
 
 ```xml
 <mujoco model="electronbot">
-  <compiler angle="degree" />
-
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.002" integrator="RK4" iterations="50" cone="elliptic"/>
   <default>
-    <geom rgba="0.9 0.9 0.9 1" />
-    <joint limited="true" damping="0.01" armature="0.001" />
-    <position ctrllimited="true" />
+    <joint damping="4.0" armature="0.1" frictionloss="0.5"/>
+    <geom contype="0" conaffinity="0" condim="3" friction="0.8 0.3 0.1" density="0.1"/>
   </default>
 
-  <!-- ===== 底座 (固定) ===== -->
-  <body name="base" pos="0 0 0">
-    <!-- 视觉 mesh (由 generate_inline_mesh.py 自动生成) -->
-    <geom type="cylinder" size="0.026 0.008" mass="0.0266" />  <!-- 底座顶 -->
-    <geom type="cylinder" size="0.026 0.006" pos="0 0 -0.006" mass="0.0102" />  <!-- 底座底 -->
-    <!-- 附加质量：电子件 60g -->
-    <geom type="box" size="0.02 0.02 0.005" pos="0 0 -0.01" 
-          mass="0.060" rgba="0.2 0.2 0.2 0.3" />
-    
-    <!-- ===== 身体 (绕 Z 旋转 ±90°) ===== -->
-    <body name="torso" pos="0 0 0.006">
-      <joint name="joint_body" type="hinge" axis="0 0 1" 
-             range="-90 90" pos="0 0 -0.006" />
-      <geom type="box" size="0.026 0.018 0.030" mass="0.0669" />
-      <geom type="box" size="0.012 0.012 0.015" pos="0 0 -0.005"
-            mass="0.009" rgba="0.1 0.3 0.8 0.3" />  <!-- SG90 舵机 -->
+  <asset>
+    <!-- 5 个内联 mesh：base_link, body, head, left_arm, right_arm -->
+    <mesh name="base_link" vertex="..." face="..."/>
+    <mesh name="body"      vertex="..." face="..."/>
+    <mesh name="head"      vertex="..." face="..."/>
+    <mesh name="left_arm"  vertex="..." face="..."/>
+    <mesh name="right_arm" vertex="..." face="..."/>
+  </asset>
 
-      <!-- ===== 头部 (绕 Y 俯仰 ±30°) ===== -->
-      <body name="head" pos="0.003 0 0.025">
-        <joint name="joint_head" type="hinge" axis="0 1 0"
-               range="-30 30" pos="-0.003 0 -0.025" />
-        <geom type="sphere" size="0.018" mass="0.032" />
-      </body>
+  <worldbody>
+    <body name="base_link" pos="0 0 0.015">
+      <geom name="base_geom" type="mesh" mesh="base_link" mass="0.045"/>
 
-      <!-- ===== 左臂 ===== -->
-      <body name="left_arm" pos="-0.017 0 0">
-        <joint name="joint_lp" type="hinge" axis="0 1 0"
-               range="-90 90" pos="0.017 0 0" />
-        <geom type="capsule" size="0.004 0.018" mass="0.005" />
-        <body name="left_hand" pos="0 0 -0.018">
-          <joint name="joint_lr" type="hinge" axis="1 0 0" range="-45 45" />
-          <geom type="sphere" size="0.008" mass="0.003" />
+      <body name="body" pos="0 0 0.03">
+        <joint name="body_joint" type="hinge" axis="0 0 1"
+               range="-1.5708 1.5708" limited="true"/>
+        <geom name="body_geom" type="mesh" mesh="body" mass="0.060"/>
+
+        <!-- 头部 -->
+        <body name="head" pos="0 0 0.07">
+          <joint name="head_joint" type="hinge" axis="0 1 0"
+                 range="-0.2618 0.2618" limited="true"/>
+          <geom name="head_geom" type="mesh" mesh="head" mass="0.030"/>
         </body>
-      </body>
 
-      <!-- ===== 右臂 (对称) ===== -->
-      <body name="right_arm" pos="0.017 0 0">
-        <joint name="joint_rp" type="hinge" axis="0 1 0"
-               range="-90 90" pos="-0.017 0 0" />
-        <geom type="capsule" size="0.004 0.018" mass="0.005" />
-        <body name="right_hand" pos="0 0 -0.018">
-          <joint name="joint_rr" type="hinge" axis="1 0 0" range="-45 45" />
-          <geom type="sphere" size="0.008" mass="0.003" />
+        <!-- 左臂（纯 LEFT_ARM_PARTS，不含身体外壳） -->
+        <body name="left_arm" pos="-0.0180 0 0.065">
+          <joint name="left_pitch_joint" type="hinge" axis="0 1 0"
+                 range="-1.5708 1.5708" limited="true"/>
+          <joint name="left_roll_joint" type="hinge" axis="1 0 0"
+                 range="-0.7854 0.7854" limited="true"/>
+          <geom name="left_arm_geom" type="mesh" mesh="left_arm"
+                pos="-0.0256 0 0" mass="0.005"/>
+          <body name="left_hand" pos="0 0.03 0">
+            <geom name="left_hand_geom" type="box"
+                  size="0.006 0.006 0.010" mass="0.003"/>
+          </body>
+        </body>
+
+        <!-- 右臂（纯 RIGHT_ARM_PARTS，不含身体外壳） -->
+        <body name="right_arm" pos="0.0180 0 0.065">
+          <joint name="right_pitch_joint" type="hinge" axis="0 1 0"
+                 range="-1.5708 1.5708" limited="true"/>
+          <joint name="right_roll_joint" type="hinge" axis="1 0 0"
+                 range="-0.7854 0.7854" limited="true"/>
+          <geom name="right_arm_geom" type="mesh" mesh="right_arm"
+                pos="0.0256 0 0" mass="0.005"/>
+          <body name="right_hand" pos="0 0.03 0">
+            <geom name="right_hand_geom" type="box"
+                  size="0.006 0.006 0.010" mass="0.003"/>
+          </body>
         </body>
       </body>
     </body>
-  </body>
+  </worldbody>
 
-  <!-- ===== 执行器 ===== -->
   <actuator>
-    <position name="act_body" joint="joint_body" 
-              ctrlrange="-90 90" gear="1.5" kp="60" forcerange="-0.15 0.15" />
-    <position name="act_head" joint="joint_head" 
-              ctrlrange="-30 30" gear="2.0" kp="40" forcerange="-0.03 0.03" />
-    <position name="act_rp" joint="joint_rp" 
-              ctrlrange="-90 90" gear="1.0" kp="50" forcerange="-0.03 0.03" />
-    <position name="act_rr" joint="joint_rr" 
-              ctrlrange="-45 45" gear="1.125" kp="30" forcerange="-0.05 0.05" />
-    <position name="act_lp" joint="joint_lp" 
-              ctrlrange="-90 90" gear="1.0" kp="50" forcerange="-0.03 0.03" />
-    <position name="act_lr" joint="joint_lr" 
-              ctrlrange="-45 45" gear="1.125" kp="30" forcerange="-0.03 0.03" />
+    <position name="act_body"        joint="body_joint"
+              ctrlrange="-1.5708 1.5708" kp="80"  kv="20"/>
+    <position name="act_head"        joint="head_joint"
+              ctrlrange="-0.2618 0.2618" kp="40"  kv="10"/>
+    <position name="act_left_pitch"  joint="left_pitch_joint"
+              ctrlrange="-1.5708 1.5708" kp="60"  kv="15"/>
+    <position name="act_left_roll"   joint="left_roll_joint"
+              ctrlrange="-0.7854 0.7854" kp="30"  kv="8"/>
+    <position name="act_right_pitch" joint="right_pitch_joint"
+              ctrlrange="-1.5708 1.5708" kp="60"  kv="15"/>
+    <position name="act_right_roll"  joint="right_roll_joint"
+              ctrlrange="-0.7854 0.7854" kp="30"  kv="8"/>
   </actuator>
 
+  <sensor>
+    <jointpos name="jpos_body" joint="body_joint"/>
+    <jointpos name="jpos_head" joint="head_joint"/>
+    <jointpos name="jpos_left_pitch" joint="left_pitch_joint"/>
+    <jointpos name="jpos_left_roll" joint="left_roll_joint"/>
+    <jointpos name="jpos_right_pitch" joint="right_pitch_joint"/>
+    <jointpos name="jpos_right_roll" joint="right_roll_joint"/>
+  </sensor>
+
   <keyframe>
-    <key name="home" qpos="0 0 0 -45 0 -45" />
+    <key name="home" qpos="0 0 0 0 0 0"/>
   </keyframe>
 </mujoco>
 ```
 
-### Step 4：碰撞几何体简化
+### 3.3 执行器参数（弧度制）
 
-对每个显示几何体创建简化碰撞版本（MuJoCo 要求碰撞几何体为凸形状）：
+| 关节 | 舵机 | kp | kv | ctrlrange (rad) | 对应角度 |
+|------|------|:--:|:--:|:----------------:|:--------:|
+| body_joint | SG90 | 80 | 20 | ±1.5708 | ±90° |
+| head_joint | 2g | 40 | 10 | ±0.2618 | ±15° |
+| left_pitch_joint | 2g | 60 | 15 | ±1.5708 | ±90° |
+| left_roll_joint | 2g | 30 | 8 | ±0.7854 | ±45° |
+| right_pitch_joint | 2g | 60 | 15 | ±1.5708 | ±90° |
+| right_roll_joint | 2g | 30 | 8 | ±0.7854 | ±45° |
 
-```xml
-<!-- 每个 body 中有视觉几何体和碰撞几何体 -->
-<body name="torso" pos="0 0 0.006">
-  <joint name="joint_body" type="hinge" axis="0 0 1" range="-90 90" pos="0 0 -0.006" />
-  
-  <!-- 视觉（高精度网格） -->
-  <geom mesh="torso_center" group="1" mass="0.0205" />
-  
-  <!-- 碰撞（简化凸包） -->
-  <geom type="cylinder" size="0.016 0.030" group="3" 
-        rgba="0 0 0 0" mass="0" />
-  <geom type="box" size="0.026 0.018 0.020" pos="0 0 -0.005" 
-        group="3" rgba="0 0 0 0" mass="0" />
-</body>
-```
+### 3.4 STL 合并对应关系
 
-### Step 5：创建桌面场景
+5 个 STL 文件的零件合并规则：
 
-文件：`assets/mjcf/scene_tabletop.xml`
-
-```xml
-<mujoco model="electronbot_scene_tabletop">
-  <include file="electronbot_mesh.xml" />
-
-  <worldbody>
-    <!-- 桌面 -->
-    <geom name="table" type="box" size="200 200 10" pos="0 0 -50"
-          rgba="0.6 0.4 0.2 1" />
-
-    <!-- 光照 -->
-    <light name="top" pos="0 0 200" />
-    <light name="side" pos="200 200 100" />
-
-    <!-- 摄像头（模拟 GC9A01 视角，mm 单位） -->
-    <camera name="head_cam" pos="3 150 200" xyaxes="-1 0 0 0 0 1"
-            fovy="60" resolution="240 240" />
-  </worldbody>
-</mujoco>
-```
+| STL 文件 | 包含的 CAD 零件 (Part__Feature) | 件数 |
+|----------|--------------------------------|:---:|
+| `base_link.stl` | 043（底座主体）+ 044（底座底板） | 2 |
+| `body.stl` | 034（身体中心）+ 035（身体右侧外壳）+ 036（身体左侧外壳） | 3 |
+| `head.stl` | 037（前脸/LCD）+ 038（头顶）+ 039（头部主壳）+ 040 + 041 | 5 |
+| `left_arm.stl` | 042（左手）+ 045（左手镜）+ 046~049（臂件） | 6 |
+| `right_arm.stl` | 027（齿轮）+ 028（小齿轮）+ 029（右手）+ 030~033（臂件） | 7 |
 
 ---
 
-## 4. 验证方法
+## 4. 实现步骤
 
-### 4.1 自动化验证脚本
+### Step 1：确认 FreeCAD 零件分组
+
+运行 `assets/cad/electronbot_joints.FCMacro` 获取正确的运动组：
 
 ```python
-# scripts/validate_model.py
+# 身体组（3 个零件，绕 Z 轴旋转腰部）
+BODY_PARTS = [
+    "Part__Feature034",  # 身体中心
+    "Part__Feature035",  # 身体右侧（肩安装座，容纳电子部件）
+    "Part__Feature036",  # 身体左侧
+]
 
-import mujoco
-import numpy as np
+# 左臂组（6 个零件，绕 Y 轴 Pitch，绕 X 轴 Roll）
+LEFT_ARM_PARTS = [
+    "Part__Feature042",  # 左手
+    "Part__Feature045",  # 左手镜
+    "Part__Feature046",  # 臂件
+    "Part__Feature047",  # 臂件
+    "Part__Feature048",  # 臂件
+    "Part__Feature049",  # 臂件
+]
 
-def validate_model(model_path: str):
-    """加载并验证 MJCF 模型"""
-    model = mujoco.MjModel.from_xml_path(model_path)
-    data = mujoco.MjData(model)
-    
-    errors = []
-    
-    # 1. 检查 body 数量
-    expected_bodies = {"base", "torso", "head", "left_arm", "left_hand", 
-                       "right_arm", "right_hand"}
-    actual_bodies = {model.body(i).name for i in range(model.nbody)}
-    for b in expected_bodies:
-        if b not in actual_bodies:
-            errors.append(f"缺少 body: {b}")
-    
-    # 2. 检查 joint 数量和类型
-    expected_joints = {
-        "joint_body": ("hinge", -90, 90),
-        "joint_head": ("hinge", -30, 30),
-        "joint_lp":   ("hinge", -90, 90),
-        "joint_lr":   ("hinge", -45, 45),
-        "joint_rp":   ("hinge", -90, 90),
-        "joint_rr":   ("hinge", -45, 45),
-    }
-    for j in range(model.njnt):
-        name = model.joint(j).name
-        if name in expected_joints:
-            jtype, jmin, jmax = expected_joints[name]
-            actual_range = model.jnt_range[j]
-            if abs(actual_range[0] - jmin) > 1 or abs(actual_range[1] - jmax) > 1:
-                errors.append(f"joint {name} range 不对: {actual_range}")
-    
-    # 3. 检查 actuator gear 映射比
-    expected_gears = {
-        "act_head": 2.0,    "act_body": 1.5,
-        "act_rp":   1.0,    "act_lp":   1.0,
-        "act_rr":   1.125,  "act_lr":   1.125,
-    }
-    for i in range(model.nu):
-        name = model.actuator(i).name
-        if name in expected_gears:
-            actual_gear = model.actuator_gear[i][0]
-            expected = expected_gears[name]
-            if abs(actual_gear - expected) > 0.01:
-                errors.append(f"actuator {name} gear={actual_gear}, 期望={expected}")
-    
-    # 4. 检查碰撞体（确保无大的未简化的 mesh 碰撞体）
-    for g in range(model.ngeom):
-        geom_type = model.geom_type[g]
-        is_collision = model.geom_group[g] == 3 or model.geom_contype[g] > 0
-        if is_collision and geom_type == 7:  # type 7 = mesh
-            errors.append(f"碰撞体 {model.geom(g).name} 使用原始 mesh，应简化为凸体")
-    
-    # 5. 模拟 100 步，无崩溃
-    try:
-        for _ in range(100):
-            mujoco.mj_step(model, data)
-    except Exception as e:
-        errors.append(f"仿真崩溃: {e}")
-    
-    # 6. 出口
-    if errors:
-        print("❌ 验证失败：")
-        for e in errors:
-            print(f"   - {e}")
-        return False
-    else:
-        print("✅ 模型验证全部通过！")
-        print(f"   nbody={model.nbody}  njoint={model.njnt}  ngeom={model.ngeom}")
-        print(f"   nactuator={model.nu}  总质量={model.body_mass.sum()*1000:.1f}g")
-        return True
-
-if __name__ == "__main__":
-    import sys
-    path = sys.argv[1] if len(sys.argv) > 1 else "assets/mjcf/scene_tabletop.xml"
-    validate_model(path)
+# 右臂组（7 个零件，绕 Y 轴 Pitch，绕 X 轴 Roll）
+RIGHT_ARM_PARTS = [
+    "Part__Feature027",  # 齿轮
+    "Part__Feature028",  # 小齿轮
+    "Part__Feature029",  # 右手
+    "Part__Feature030",  # 臂件
+    "Part__Feature031",  # 臂件
+    "Part__Feature032",  # 臂件
+    "Part__Feature033",  # 臂件
+]
 ```
 
-### 4.2 手动可视化验证
+### Step 2：将 STL 按运动组合并导出
+
+使用 FreeCAD 命令行或 GUI，将每组零件合并导出为单个 STL：
 
 ```bash
-# inline mesh 版 (CAD 真实外形)
-MUJOCO_GL=egl python -m mujoco.viewer --mjcf=assets/mjcf/electronbot_mesh.xml
-
-# 桌面场景
-MUJOCO_GL=egl python -m mujoco.viewer --mjcf=assets/mjcf/scene_tabletop.xml
-
-# SSH / 无 X11 环境 → EGL 无头渲染到 PNG
-MUJOCO_GL=egl python3 -c "
-import mujoco, cv2
-m = mujoco.MjModel.from_xml_path('assets/mjcf/electronbot_mesh.xml')
-d = mujoco.MjData(m); r = mujoco.Renderer(m, 480, 480)
-mujoco.mj_forward(m, d); r.update_scene(d)
-cv2.imwrite('snapshot.png', cv2.cvtColor(r.render(), cv2.COLOR_RGB2BGR))
-"
+# 每组零件在 FreeCAD 中选中后合并 → 导出 STL
+# 导出 5 个文件到 assets/meshes/：
+#   base_link.stl, body.stl, head.stl, left_arm.stl, right_arm.stl
 ```
 
-### 4.3 与真机对照
+### Step 3：生成 inline mesh XML
 
-用真机拍照（前/侧/后三个角度），与 MuJoCo viewer 截图逐帧对比零件位置和比例。
+```bash
+python scripts/generate_inline_mesh.py \
+    --input assets/meshes \
+    --output assets/mjcf/electronbot_full_arm.xml
+```
+
+脚本核心逻辑：
+1. 扫描 `assets/meshes/` 目录下的所有 `.stl` 文件
+2. 按文件名分类：`base_link` → base, `body` → torso, `head` → head, `left_arm` → left_arm, `right_arm` → right_arm
+3. 每组内多个 STL 合并为一个 inline mesh（顶点合并）
+4. 保持 STL 原始单位（mm），不缩放
+5. 输出 MJCF XML，内嵌 vertex/face 字符串
+
+### Step 4：稳定性调优
+
+**问题**：s 初始模型使用默认积分器导致仿真数值爆炸。
+
+**解决方案**：
+- 积分器：`implicitfast` → `RK4`（4 阶龙格-库塔，更稳定）
+- 迭代次数：增加 `iterations="50"`
+- 关节阻尼：`damping="4.0"`，`armature="0.1"`
+- 执行器参数：按舵机规格设置（kp=30-80，kv=8-20）
+
+### Step 5：最终调整 actuator 参数
+
+```bash
+python update_actuator.py
+```
+
+该脚本按舵机规格重新写入 `electronbot_full_arm.xml` 的 actuator 段：
+- SG90 腰部舵机：kp=80, kv=20
+- 2g 微型舵机（头部/双臂 Pitch）：kp=60, kv=15 (头部 kp=40)
+- 2g 微型舵机（手臂 Roll）：kp=30, kv=8
+
+### Step 6：验证
+
+```bash
+python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml
+```
 
 ---
 
-## 5. 调试命令速查
+## 5. 验证方法
+
+### 5.1 手动可视化验证
 
 ```bash
-# 模型结构检查
-python -c "import mujoco; m=mujoco.MjModel.from_xml_path('assets/mjcf/electronbot_mesh.xml'); print(m.njnt,'joints,',m.nu,'actuators')"
+cd ElectronBot_SIM
 
-# inline mesh 版 viewer
-MUJOCO_GL=egl python -m mujoco.viewer --mjcf=assets/mjcf/electronbot_mesh.xml
+# 启动 viewer，观察模型
+python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml
 
-# mesh 版 (展示)
-MUJOCO_GL=egl python -m mujoco.viewer --mjcf=assets/mjcf/scene_mesh.xml
-
-# CAD → STL 导出
-python scripts/export_cad_meshes.py
-
-# STL → inline mesh XML
-python scripts/generate_inline_mesh.py
-
-# 场景 mesh 版生成
-sed 's/electronbot.xml/electronbot_mesh.xml/' assets/mjcf/scene.xml > assets/mjcf/scene_mesh.xml
+# Control 面板拖动 actuator slider 测试各关节
+# act_body / act_head / act_left_pitch / act_left_roll / act_right_pitch / act_right_roll
 ```
 
-## 6. 交付物清单
+### 5.2 验证标准
 
-| 文件 | 描述 | 验证标准 |
+- 6 个关节均可独立拖动，不卡死
+- 身体绕 Z 轴旋转 ±90° 时，头部和双臂随动
+- 手臂 Pitch/Y 轴运动时，仅手臂零件运动，身体侧外壳不动
+- 仿真无 NaN 崩溃，稳态无抖动
+- 模型比例与真机照片一致
+
+### 5.3 模型结构快速检查
+
+```bash
+python -c "import mujoco; m=mujoco.MjModel.from_xml_path('assets/mjcf/electronbot_full_arm.xml'); print(m.njnt,'joints,',m.nu,'actuators')"
+```
+
+---
+
+## 6. 工程经验教训
+
+### 6.1 FreeCAD 分组是瓶颈
+
+原始设计文档假设 24 个 CAD 零件可分别导出后独立处理。实际上：
+- **运动组才是 MuJoCo 中的刚体单元**，同一组的零件在仿真中不可拆分
+- 按运动组合并导出反而更简单（5 个文件 vs 24 个文件）
+- 正确分组信息在 `assets/cad/electronbot_joints.FCMacro` 中定义，需运行宏才能提取
+
+### 6.2 STL 导出时的零件污染
+
+原始 STL 导出时身体侧外壳被错误合并到手臂文件中，必须重新导出修正。
+
+**教训**：从 CAD 导出 STL 前，必须仔细确认每个零件属于哪个运动组，不能仅仅按名称或位置猜测。
+
+### 6.3 MuJoCo mesh 自动中心化
+
+MuJoCo 加载 inline mesh 时会自动将 mesh 质心移到 body 原点。这会导致位置偏移，必须用 `geom pos` 补偿：
+
+```python
+# 计算 arm geom 偏移量
+body_hw = body_mesh_width / 2
+arm_hw  = arm_mesh_width / 2
+left_geom_offset = -(body_hw + arm_hw)
+right_geom_offset = +(body_hw + arm_hw)
+```
+
+### 6.4 mm 单位对稳定性的影响
+
+STL 为 mm 单位时惯性被放大 10¹² 倍，需用高增益控制器适配：
+- `damping` 从 0.01 提到 4.0
+- `armature` 从 0.001 提到 0.1
+- 积分器改为 RK4
+
+### 6.5 场景文件是不必要的
+
+原始设计文档规划了 `scene_mesh.xml` 和 `scene_tabletop.xml` 两个场景文件。实际中：
+- `electronbot_full_arm.xml` 自带光照和相机，可直接在 viewer 中观察
+- 桌面场景对仿真无实际帮助，增大了维护负担
+- **删繁就简，只保留核心模型文件**
+
+---
+
+## 附录：文件清单
+
+### A. 核心文件
+
+| 文件 | 描述 | 生成方式 |
 |------|------|----------|
-| `assets/meshes/*.stl` | 24个简化网格 | 每个 < 500KB |
-| `assets/mjcf/electronbot_mesh.xml` | inline mesh 版 MJCF | 零外部文件, ~12MB, ~500 fps, validate_model.py 通过 |
-| `assets/mjcf/scene_mesh.xml` | 场景 include mesh 版 | MuJoCo viewer 可打开 |
-| `assets/mjcf/scene_tabletop.xml` | 桌面场景 (含桌面碰撞体) | MuJoCo viewer 可打开 |
-| `scripts/generate_inline_mesh.py` | STL→inline mesh 生成器 | 输出合法 MJCF vertex/face |
-| `scripts/calc_inertia.py` | 惯性计算脚本 | 输出正确的 mass/inertia |
-| `scripts/validate_model.py` | 模型验证脚本 | 全部检查通过 |
+| `assets/mjcf/electronbot_full_arm.xml` | inline mesh 版 MJCF（~1.7MB） | `scripts/generate_inline_mesh.py` |
+| `assets/meshes/base_link.stl` | 底座合并 STL | FreeCAD 按组导出 |
+| `assets/meshes/body.stl` | 身体合并 STL | FreeCAD 按组导出 |
+| `assets/meshes/head.stl` | 头部合并 STL | FreeCAD 按组导出 |
+| `assets/meshes/left_arm.stl` | 左臂合并 STL（纯手臂） | FreeCAD 按组导出 |
+| `assets/meshes/right_arm.stl` | 右臂合并 STL（纯手臂） | FreeCAD 按组导出 |
 
----
+### B. CAD 源文件（`assets/cad/`）
 
-## 7. 接口设计
+| 文件 | 描述 |
+|------|------|
+| `ElectronBot.step` | 原始 CAD 模型（STEP 格式，24 零件） |
+| `cadelectron.FCStd` | FreeCAD 原生格式（含装配结构） |
+| `electronbot_joints.FCMacro` | 关节控制宏（提取零件分组信息） |
+| `electronbot_assembly.FCMacro` | 装配宏 |
+| `robot-structure.md` | 机器人结构解读文档 |
+| `freecad-joint-control.md` | FreeCAD 关节控制操作指南 |
 
-### 7.1 模块对外接口
+### C. 生成脚本
 
-本模块（CAD → MJCF 建模）对外暴露三个核心脚本，均位于 `scripts/` 目录下，可作为命令行工具独立调用，也可被 Python 代码 import 复用。
+| 脚本 | 描述 |
+|------|------|
+| `scripts/generate_inline_mesh.py` | STL → inline mesh XML 生成器 |
+| `update_actuator.py` | 写入按舵机规格匹配的 actuator kp/kv 参数 |
 
-#### 7.1.1 `generate_inline_mesh.py`
+### D. 验证命令
 
-```python
-def stl_to_inline_mesh(stl_path: str) -> tuple[str, str]:
-    """
-    将单个 STL 文件转换为 MuJoCo inline mesh 所需的 base64 编码字符串。
-
-    参数:
-        stl_path: STL 文件绝对或相对路径（单位: mm，不进行缩放）
-
-    返回:
-        tuple[str, str]:
-            - vertex: 顶点数据 base64 字符串（float32 little-endian）
-            - face:   面数据 base64 字符串（int32 little-endian）
-
-    异常:
-        FileNotFoundError: STL 文件不存在
-        ValueError:        STL 解析失败（格式损坏或为空）
-    """
-```
-
-命令行入口：`python scripts/generate_inline_mesh.py [--input assets/meshes/] [--output assets/mjcf/electronbot_mesh.xml]`
-
-#### 7.1.2 `calc_inertia.py`
-
-```python
-from dataclasses import dataclass
-import numpy as np
-
-@dataclass
-class InertiaResult:
-    """单个零件的惯性计算结果"""
-    name: str                   # 零件名（与 STL 文件名对应）
-    mass: float                 # 质量 (kg)
-    com: np.ndarray             # 质心坐标 (3,) mm
-    inertia_matrix: np.ndarray  # 相对质心的惯性张量 (3, 3) kg·mm²
-
-
-def calculate_inertia(stl_path: str, density: float = 1.24e-6) -> InertiaResult:
-    """
-    基于 STL 几何体与均质密度假设计算质量、质心、惯性张量。
-
-    参数:
-        stl_path: STL 文件路径（单位: mm）
-        density:  密度 (kg/mm³)，默认 PLA_DENSITY=1.24e-6（即 1.24 g/cm³）
-
-    返回:
-        InertiaResult: 含 mass/com/inertia_matrix 的数据类
-
-    异常:
-        FileNotFoundError: STL 文件不存在
-        ZeroDivisionError: 退化几何体（体积为 0）导致惯性张量不可计算
-    """
-```
-
-命令行入口：`python scripts/calc_inertia.py [--density 1.24e-6]`，输出 markdown 表格供直接粘贴到 MJCF。
-
-#### 7.1.3 `validate_model.py`
-
-```python
-def validate_model(model_path: str) -> bool:
-    """
-    加载并验证 MJCF 模型的结构完整性、关节范围、actuator gear 映射、
-    碰撞几何体合理性，并执行 100 步仿真 smoke test。
-
-    参数:
-        model_path: MJCF XML 文件路径（可为 scene.xml 或单文件）
-
-    返回:
-        bool: True 表示全部检查通过，False 表示存在错误（错误列表打印到 stdout）
-
-    异常:
-        mujoco.FatalError: XML 解析失败（语法错误/引用缺失）会直接抛出
-    """
-```
-
-命令行入口：`python scripts/validate_model.py [assets/mjcf/scene_tabletop.xml]`
-
-### 7.2 输入输出契约
-
-| 接口 | 输入格式 | 输出格式 | 异常条件 |
-|------|----------|----------|----------|
-| `stl_to_inline_mesh` | STL 文件路径（ASCII 或 binary STL，mm 单位） | `(vertex_b64, face_b64)` 字符串元组 | 文件不存在；STL 损坏；顶点数为 0 |
-| `calculate_inertia` | STL 路径 + 密度（kg/mm³） | `InertiaResult`（mass, com, inertia_matrix） | 文件不存在；零体积退化几何体；非流形 mesh |
-| `validate_model` | MJCF XML 路径 | `bool`（详细错误打印到 stdout） | XML 语法错误；body/joint 缺失；引用文件不存在 |
-| `generate_inline_mesh.py` (CLI) | `--input` meshes 目录 | `--output` electronbot_mesh.xml | 输入目录为空；24 个 STL 缺失 |
-| `calc_inertia.py` (CLI) | `--density` 参数 | stdout markdown 表格 | 单个 STL 失败时跳过并记录，不中断批量流程 |
-
----
-
-## 8. 数据模型
-
-### 8.1 核心数据结构
-
-#### 8.1.1 STL mesh 数据结构（trimesh.Trimesh 视图）
-
-```python
-import numpy as np
-
-# trimesh.Trimesh 的关键字段
-class TrimeshView:
-    vertices: np.ndarray        # shape (N, 3), dtype float32, 单位 mm
-    faces:    np.ndarray        # shape (M, 3), dtype int32, 顶点索引
-    volume:   float             # 体积 mm³（仅对水密网格有效）
-    center_mass: np.ndarray     # shape (3,) 质心 mm
-    moment_inertia: np.ndarray  # shape (3, 3) 惯性张量 mm⁵（需乘密度得 kg·mm²）
-```
-
-#### 8.1.2 InertiaResult dataclass
-
-```python
-from dataclasses import dataclass
-
-@dataclass
-class InertiaResult:
-    name: str
-    mass: float                   # kg
-    com: np.ndarray               # (3,) mm
-    inertia_matrix: np.ndarray    # (3, 3) kg·mm²，关于质心
-```
-
-#### 8.1.3 MJCF inline mesh 格式
-
-```xml
-<mesh name="base_link"
-      vertex="AAAAQAAAAMEAAADC..."   <!-- float32 little-endian base64 -->
-      face="AAAAAQAAAAIAAAAD..."/>   <!-- int32 little-endian base64 -->
-```
-
-编码约定：
-- 顶点：`base64(vertices.astype('<f4').tobytes())`
-- 面：`base64(faces.astype('<i4').tobytes())`
-- 单位：与 STL 一致（mm），不进行单位换算
-
-#### 8.1.4 零件清单数据结构
-
-```python
-# scripts/calc_inertia.py 内部用
-meshes: dict[str, str] = {
-    "base_top":     "assets/meshes/base_top.stl",
-    "torso_center": "assets/meshes/torso_center.stl",
-    # ... 共 24 项
-}
-```
-
-### 8.2 数据流
-
-```
-            ┌──────────────────┐
-            │ ElectronBot.step │  (原始 CAD, 30.5MB)
-            └────────┬─────────┘
-                     │ FreeCAD 手动导出
-                     ▼
-        ┌──────────────────────────┐
-        │ assets/meshes/*.stl × 24 │  (mm 单位, 每个小于 500KB)
-        └─────┬────────────────────┘
-              │
-              ├──────────────────────────────────────┐
-              ▼                                      ▼
-   ┌─────────────────────────┐         ┌──────────────────────────┐
-   │ generate_inline_mesh.py │         │ calc_inertia.py          │
-   │ stl → base64 vertex/face│         │ stl → InertiaResult      │
-   └───────────┬─────────────┘         └──────────┬───────────────┘
-               │                                  │
-               ▼                                  ▼
-   ┌─────────────────────────┐         ┌──────────────────────────┐
-   │ electronbot_mesh.xml    │◀────────│ mass/com/inertia 填入    │
-   │ (inline mesh 版, ~12MB) │         │ body 的 <inertial> 标签   │
-   └───────────┬─────────────┘         └──────────────────────────┘
-               │
-               ▼
-   ┌─────────────────────────┐
-   │ scene_tabletop.xml      │  (桌面场景)
-   └───────────┬─────────────┘
-               │
-               ▼
-   ┌─────────────────────────┐
-   │ validate_model.py       │  → bool (通过/失败)
-   │ body/joint/actuator/    │
-   │ 碰撞体/100 步仿真       │
-   └─────────────────────────┘
+```bash
+# 最终验证
+cd ElectronBot_SIM
+python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml
 ```
 
 ---
 
-## 9. 错误处理与恢复
-
-### 9.1 错误分类
-
-| 错误类型 | 触发条件 | 处理策略 | 用户感知 |
-|----------|----------|----------|----------|
-| STL 文件加载失败 | 文件不存在、路径权限不足 | `FileNotFoundError` 抛出，CLI 退出码 2 | 控制台红色错误提示 + 路径 |
-| STL 格式错误 | 非 STL 格式、ASCII/Binary 混乱、顶点数为 0 | `trimesh.load` 抛 `ValueError`，捕获后跳过该零件 | 警告日志，批量流程继续 |
-| 退化几何体 | 体积为 0（薄壳、自相交、非流形） | `ZeroDivisionError` 捕获，惯性矩阵置为单位矩阵 ×1e-6 | 警告日志，标注"惯性使用占位值" |
-| 惯性矩阵负定 | 数值误差导致主惯性矩为负 | `np.linalg.eigvalsh` 检测后取绝对值并 clamp | 警告日志，模型仍可加载 |
-| MJCF XML 验证失败 | body/joint/actuator 缺失或范围错误 | `validate_model` 收集全部错误后一次性打印 | 控制台列出所有错误项 |
-| mm 单位惯性放大 10¹² 倍 | STL 为 mm，未适配控制器参数 | 不缩放 STL，改用高 kp/kv/forcerange（见 §3 关键教训） | 训练版正常，mesh 版关节不卡死 |
-| 碰撞体使用原始 mesh | 凸包简化遗漏，group=3 仍为 mesh | `validate_model` 报错并指明 geom 名 | 控制台提示需替换为凸体 |
-| actuator gear 不匹配 | gear 与映射比表不一致 | `validate_model` 打印期望值 vs 实际值 | 控制台列出差异 |
-| 仿真 100 步崩溃 | NaN、关节发散、穿透 | 捕获 `Exception`，记录堆栈 | 控制台输出崩溃原因 |
-
-### 9.2 异常恢复流程
-
-#### 9.2.1 STL 批量处理中的单文件失败
-
-```
-[calc_inertia.py 批量循环]
-  for name, path in meshes.items():
-      try:
-          result = calculate_inertia(path, density)
-          results.append(result)
-      except (FileNotFoundError, ValueError, ZeroDivisionError) as e:
-          logger.warning(f"跳过 {name}: {e}")
-          # 用占位惯性，避免阻塞下游 MJCF 生成
-          results.append(InertiaResult(
-              name=name, mass=1e-6,
-              com=np.zeros(3),
-              inertia_matrix=np.eye(3) * 1e-9
-          ))
-  # 全部失败超过 50% → 退出码 3，提示用户检查 meshes 目录
-```
-
-#### 9.2.2 mm 单位惯性放大问题（已知坑）
-
-现象：STL 为 mm 单位，MuJoCo 按米解析导致惯性放大 10¹² 倍，关节卡死不动。
-恢复流程：
-1. **不要缩放 STL**（会导致 MuJoCo 自动重算顶点中心、位置错乱）
-2. 保持 STL 原 mm 单位，调整控制器参数适配大惯量：
-   - `damping` 从 0.01 提到 0.5（防过阻尼）
-   - `armature` 从 0.001 提到 0.01
-   - `position kp` 从 50 提到 500
-   - `forcerange` 从 ±0.15 提到 ±100
-3. 相机参数同步适配：`cam.lookat=[0,0,50]`, `cam.distance=200`
-4. 验证：`validate_model.py` 通过 + viewer 中关节可拖动
-
-#### 9.2.3 validate_model 失败后的修复路径
-
-```
-validate_model 报错
-   │
-   ├─ body 缺失         → 检查 MJCF <body> 标签拼写、父嵌套关系
-   ├─ joint range 错误  → 对照 §2.3.2 映射比表，修正 range 属性
-   ├─ actuator gear 错误 → 对照 [1.0, 1.125, 1.0, 1.125, 1.5, 2.0] 修正
-   ├─ 碰撞体为原始 mesh → 替换为 type="cylinder"/"box"/"capsule" 凸体
-   └─ 仿真崩溃          → 检查 inertia_matrix 是否含 NaN、damping 是否过小
-```
-
----
-
-## 10. 配置管理
-
-### 10.1 配置参数表
-
-| 参数名 | 类型 | 默认值 | 范围 | 说明 |
-|--------|------|--------|------|------|
-| `PLA_DENSITY` | float | 1.24e-6 | — | PLA 密度，单位 kg/mm³（即 1.24 g/cm³） |
-| `EXTRA_MASS_KG` | float | 0.060 | 0 ~ 0.2 | 附加质量（舵机+PCB+电池），加在 base body |
-| `MAX_STL_SIZE_KB` | int | 500 | 100 ~ 2000 | 单个 STL 文件大小上限 |
-| `MAX_COLLISION_FACES` | int | 200 | 50 ~ 1000 | 碰撞几何体最大面数 |
-| `SIM_STEPS_SMOKE` | int | 100 | 10 ~ 1000 | validate_model 中的 smoke test 步数 |
-| `joint_body_range` | tuple | (-90, 90) | 度 | 腰部绕 Z 轴旋转范围 |
-| `joint_head_range` | tuple | (-30, 30) | 度 | 头部绕 Y 轴俯仰范围 |
-| `joint_lp_range` | tuple | (-90, 90) | 度 | 左臂 pitch 范围 |
-| `joint_rp_range` | tuple | (-90, 90) | 度 | 右臂 pitch 范围 |
-| `joint_lr_range` | tuple | (-45, 45) | 度 | 左臂 roll 范围 |
-| `joint_rr_range` | tuple | (-45, 45) | 度 | 右臂 roll 范围 |
-| `gear_head` | float | 2.0 | — | HEAD 关节映射比 |
-| `gear_body` | float | 1.5 | — | BODY 关节映射比 |
-| `gear_rp` | float | 1.0 | — | RIGHT_PITCH 映射比 |
-| `gear_lp` | float | 1.0 | — | LEFT_PITCH 映射比 |
-| `gear_rr` | float | 1.125 | — | RIGHT_ROLL 映射比 |
-| `gear_lr` | float | 1.125 | — | LEFT_ROLL 映射比 |
-| `kp_mesh` | float | 500 | 100 ~ 1000 | inline mesh 版 position kp（适配大惯量） |
-
-> **映射比表**（与固件安全范围对应，顺序 `[RP, RR, LP, LR, BODY, HEAD]`）：`[1.0, 1.125, 1.0, 1.125, 1.5, 2.0]`
-
-### 10.2 环境变量
-
-| 环境变量 | 默认值 | 说明 |
-|----------|--------|------|
-| `MUJOCO_GL` | 未设置（自动） | 渲染后端：`egl`（无头 GPU）/ `osmesa`（纯 CPU）/ `glfw`（X11） |
-| `ELECTRONBOT_MESH_DIR` | `assets/meshes` | STL 输入目录 |
-| `ELECTRONBOT_MJCF_DIR` | `assets/mjcf` | MJCF 输出目录 |
-| `ELECTRONBOT_DENSITY` | `1.24e-6` | 覆盖 PLA_DENSITY（用于材质切换实验） |
-| `FREECAD_PATH` | — | FreeCAD 可执行路径，用于自动化 STL 导出（可选） |
-
----
-
-## 11. 日志与可观测性
-
-### 11.1 日志规范
-
-日志级别：`DEBUG` / `INFO` / `WARNING` / `ERROR`，默认 `INFO`。
-格式：`[%(asctime)s][%(levelname)s][%(name)s] %(message)s`
-
-关键事件：
-
-| 阶段 | 级别 | 事件 | 字段 |
-|------|------|------|------|
-| STL 加载 | INFO | `mesh loaded` | 文件名、顶点数、面数、体积(mm³)、质量(g) |
-| STL 加载 | WARNING | `degenerate mesh` | 文件名、体积=0、原因 |
-| 惯性计算 | INFO | `inertia computed` | name、mass(g)、com(mm)、主惯性矩 |
-| Inline mesh 生成 | INFO | `inline mesh encoded` | name、vertex_b64_len、face_b64_len |
-| XML 验证 | INFO | `validate pass` | nbody、njoint、nu、总质量(g) |
-| XML 验证 | ERROR | `validate fail` | 错误项列表 |
-| 仿真 smoke test | INFO | `smoke test ok` | 100 步耗时(ms) |
-| 性能基准 | INFO | `fps benchmark` | 版本（mesh）、fps |
-
-示例日志：
-```
-[2026-07-04T10:23:11][INFO][calc_inertia] mesh loaded file=torso_center.stl vertices=1240 faces=2480 volume=16545.2 mass=20.5
-[2026-07-04T10:23:11][INFO][calc_inertia] inertia computed name=torso_center mass=20.5 com=[0.1, 0.0, 30.2] principal=[0.12, 0.15, 0.20]
-[2026-07-04T10:23:12][INFO][validate_model] validate pass nbody=7 njoint=6 nu=7 total_mass=160.3
-[2026-07-04T10:23:12][INFO][validate_model] smoke test ok steps=100 elapsed_ms=12.4
-[2026-07-04T10:23:18][INFO][benchmark] fps benchmark version=mesh fps=487
-```
-
-### 11.2 关键指标
-
-| 指标名 | 类型 | 采集方式 | 告警阈值 |
-|--------|------|----------|----------|
-| `fps_primitive` | gauge | benchmark 脚本 | < 1500 告警 |
-| `fps_mesh` | gauge | benchmark 脚本 | < 300 告警 |
-| `total_mass_g` | gauge | validate_model 输出 | < 140 或 > 180 告警 |
-| `mesh_file_size_kb` | gauge | 文件系统 stat | > 600 告警 |
-| `validate_pass` | bool(0/1) | validate_model 返回值 | =0 告警 |
-| `smoke_test_crash` | bool(0/1) | validate_model 异常捕获 | =1 告警 |
-| `stl_load_failures` | counter | calc_inertia 批量统计 | > 3 告警 |
-
----
-
-## 12. 风险评估
-
-### 12.1 技术风险
-
-| 风险项 | 概率 | 影响 | 缓解措施 |
-|--------|:---:|:---:|----------|
-| STL 简化过度导致碰撞检测不准确 | 中 | 中 | 保留关键外形特征，凸包 + cylinder 组合；validate_model 检查面数 < 200 |
-| 惯性参数与真机偏差（PLA 密度变化、打印填充率） | 高 | 中 | 暴露 `ELECTRONBOT_DENSITY` 环境变量；RL 训练用域随机化 ±10% 密度 |
-| inline mesh 文件过大（~2MB）影响加载速度 | 中 | 低 | 单文件 ~2MB 可接受；如需优化可改用外部 .stl 引用 |
-| mm 单位惯性放大导致关节卡死 | 高（已知） | 高 | 不缩放 STL，控制器参数适配（见 §3 关键教训） |
-| 碰撞几何体非凸导致 MuJoCo 报错 | 中 | 高 | validate_model 强制检查 group=3 不为 mesh 类型 |
-| 非流形 STL 导致 trimesh 计算失败 | 低 | 中 | 批量流程捕获异常并跳过，用占位惯性 |
-| MuJoCo 版本升级导致 API 不兼容 | 低 | 中 | 锁定 mujoco==3.x；CI 跑 validate_model |
-
-### 12.2 依赖风险
-
-| 外部依赖 | 版本 | 风险 | 应对 |
-|----------|------|------|------|
-| `trimesh` | >=4.0 | STL 解析行为变化 | 单元测试覆盖 24 个标准 STL |
-| `mujoco` (Python bindings) | 3.x | API 升级破坏 `MjModel.from_xml_path` | 锁版本，CI 验证 |
-| FreeCAD | 0.21+ | 宏 API 变化影响 STL 导出 | 手动导出为主，自动化导出为辅 |
-| `numpy` | >=1.24 | dtype 默认变化（float64 vs float32） | 显式 `.astype('<f4')` |
-| ElectronBot.step 原始 CAD | 30.5MB | 上游 CAD 修订导致零件数变化 | 重新导出 STL 并跑 calc_inertia |
-
----
-
-## 13. 变更记录
+## 变更记录
 
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|----------|------|
-| v1.0 | 2026-07-03 | 初始版本 | — |
+| v1.0 | 2026-07-03 | 初始版本（24 零件独立导出方案） | — |
 | v1.1 | 2026-07-04 | 补充软件工程规范章节 | 架构师 |
-| v1.2 | 2026-07-04 | 移除几何基元版，统一使用 inline mesh 版；修复 actuator 排序匹配 DOF 顺序 | — |
+| v1.2 | 2026-07-04 | 移除几何基元版，统一 inline mesh 版 | — |
+| **v2.0** | **2026-07-06** | **根据实际实现重写——5 组 STL 合并导出，修正关节命名、结构、生成流程** | — |

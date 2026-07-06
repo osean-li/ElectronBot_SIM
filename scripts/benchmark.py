@@ -145,7 +145,7 @@ def main():
         logger.warning("⚠️ %s", a)
 
     # 检查 mesh 文件大小
-    mesh_xml = "assets/mjcf/electronbot_mesh.xml"
+    mesh_xml = "assets/mjcf/electronbot_full_arm.xml"
     size_info = check_file_size(mesh_xml)
     if size_info.get("exists") and not size_info["ok"]:
         all_alerts.append(

@@ -87,7 +87,7 @@
 │  Layer 2: 物理仿真引擎                            ◄── 物理核心  │
 │  ┌──────────────────────────────────────────────────────────┐ │
 │  │  MuJoCo 3.x                                               │ │
-│  │  ├── 刚体动力学 (7 body, 24 零件)                         │ │
+│  │  ├── 刚体动力学 (7 body, 5 组合并 STL)                    │ │
 │  │  ├── 6 铰链关节 (hinge, 含映射比 gear)                     │ │
 │  │  ├── 6 位置执行器 (50Hz, kp 校准)                         │ │
 │  │  ├── 接触力学 (碰撞检测, 接触力)                           │ │
@@ -99,12 +99,12 @@
 │                              │                                  │
 │  Layer 1: 模型描述层                              ◄── 建模基础  │
 │  ┌──────────────────────────────────────────────────────────┐ │
-│  │  STEP (30.5MB) → FreeCAD 拆解 → URDF → MJCF (MuJoCo XML) │ │
-│  │  ├── 24 个 3D 打印零件几何体                               │ │
-│  │  ├── 惯性参数 (PLA 1.24g/cm³ + 电子件 60g)                │ │
-│  │  ├── 6 关节旋转中心 (CAD 坐标)                             │ │
-│  │  ├── 舵机→机械关节映射比 (1.0/1.125/1.5/2.0)              │ │
-│  │  └── 简化碰撞几何体 (<200 面凸包)                          │ │
+│  │  STEP → FreeCAD 按运动组合并 → MJCF (MuJoCo inline mesh)  │ │
+│  │  ├── 5 组合并 STL (base/body/head/left_arm/right_arm)    │ │
+│  │  ├── 7 body 运动学链 (base_link → body → head/arm)       │ │
+│  │  ├── 6 铰链关节 (hinge, 含映射比 gear)                    │ │
+│  │  ├── 6 位置执行器 (kp/kv 按舵机规格校准)                   │ │
+│  │  └── 内联 mesh 单文件 (~1.7MB, 零外部依赖)                │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -204,10 +204,11 @@ ElectronBot_SIM/
 │       └── calibrate.py        #   真机校准工具
 │
 ├── scripts/                    # 工具脚本
-│   ├── calc_inertia.py
-│   ├── cad_to_urdf.py
-│   ├── validate_model.py
-│   └── flash_firmware.sh
+│   ├── generate_inline_mesh.py   STL → inline mesh XML 生成器
+│   ├── validate_model.py         模型结构验证
+│   ├── benchmark.py              FPS 性能基准测试
+│   ├── visual_demo.py            可视化运动演示
+│   └── export_cad_meshes.py      FreeCAD STL 导出
 │
 ├── tests/
 ├── web/                        # Three.js 3D 可视化前端
@@ -218,6 +219,28 @@ ElectronBot_SIM/
 ├── checkpoints/
 ├── demos/
 ├── results/
+├── tools/                       # FreeCAD AppImage 等开发工具
+│
+├── 根目录开发脚本 (Phase 1 CAD→MJCF 开发遗留)
+│   ├── generate_split_mjcf.py     生成分离式 MJCF
+│   ├── build_fc_mjcf.py           用 FreeCAD 导出构建 MJCF
+│   ├── update_actuator.py         写入最终 actuator kp/kv 参数
+│   ├── export_arm_from_freecad.py 从 FreeCAD 导出 arm STL
+│   ├── fix_arm_mass_correct.py    修复 arm 身体质量
+│   ├── fix_kp.py                  修复 kp 参数
+│   ├── fix_joint_axes.py          修复关节轴方向
+│   ├── create_stable_model.py     创建稳定仿真配置
+│   ├── verify_freecad_aligned.py  验证 FreeCAD 对齐
+│   ├── analyze_freecad.py         分析 FreeCAD 模型
+│   ├── test_keyboard_control.py   键盘控制测试
+│   ├── test_viewer_control.py     Viewer 控制测试
+│   ├── debug_mouse_control.py     鼠标控制调试
+│   ├── simple_arm_test.py         简单 arm 测试
+│   ├── test_arm_no_viewer.py      无 viewer 测试
+│   ├── diagnose_control.py        控制问题诊断
+│   ├── diagnose_explosion.py      仿真爆炸诊断
+│   └── quick_diagnose.py          快速诊断
+│
 └── pyproject.toml
 ```
 
@@ -985,12 +1008,12 @@ result = backend.call("self.electron.hand_action", {
 
 | 关节 | MCP 代号 | 索引 | GPIO | 安全范围 (°) | 初始 (°) | 映射比 | MuJoCo joint |
 |------|----------|:---:|------|:---:|:---:|:---:|------|
-| 右臂 Pitch | `rp` | 0 | GPIO 5 | 0-180 | 180 | 1.0 | `joint_rp` |
-| 右臂 Roll | `rr` | 1 | GPIO 4 | 100-180 | 180 | 1.125 | `joint_rr` |
-| 左臂 Pitch | `lp` | 2 | GPIO 7 | 0-180 | 0 | 1.0 | `joint_lp` |
-| 左臂 Roll | `lr` | 3 | GPIO 15 | 0-80 | 0 | 1.125 | `joint_lr` |
-| 身体 | `b` | 4 | GPIO 6 | 30-150 | 90 | 1.5 | `joint_body` |
-| 头部 | `h` | 5 | GPIO 16 | 75-105 | 90 | 2.0 | `joint_head` |
+| 右臂 Pitch | `rp` | 0 | GPIO 5 | 0-180 | 180 | 1.0 | `right_pitch_joint` |
+| 右臂 Roll | `rr` | 1 | GPIO 4 | 100-180 | 180 | 1.125 | `right_roll_joint` |
+| 左臂 Pitch | `lp` | 2 | GPIO 7 | 0-180 | 0 | 1.0 | `left_pitch_joint` |
+| 左臂 Roll | `lr` | 3 | GPIO 15 | 0-80 | 0 | 1.125 | `left_roll_joint` |
+| 身体 | `b` | 4 | GPIO 6 | 30-150 | 90 | 1.5 | `body_joint` |
+| 头部 | `h` | 5 | GPIO 16 | 75-105 | 90 | 2.0 | `head_joint` |
 
 ## 附录 B: 安全角度裁剪
 
