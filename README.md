@@ -145,14 +145,28 @@ ElectronBot_SIM/
 │       ├── calibrate.py         # 舵机校准
 │       └── capability_downgrade.py  # 能力降级
 │
+├── scripts/                     # 构建与工具脚本
+│   ├── build_fc_mjcf.py         # FreeCAD STL → MJCF
+│   ├── split_arm_mesh.py        # 手臂 Mesh 分离
+│   ├── validate_model.py        # 模型结构验证
+│   ├── benchmark.py             # FPS 性能基准
+│   ├── calc_inertia.py          # 惯性参数计算
+│   ├── setup_env.sh             # 环境一键部署
+│   └── ...
 ├── tests/                       # pytest 测试套件
-├── scripts/                     # 工具脚本
 ├── demos/                       # 演示与教程
 ├── assets/                      # 模型资源
 │   ├── mjcf/                    # MuJoCo XML 模型
 │   ├── cad/                     # CAD 图纸
 │   └── meshes/                  # 网格文件
-└── docs/                        # 详细文档
+├── docs/                        # 详细文档
+│   ├── overview.md              # 项目交付总结
+│   ├── notes/                   # 开发笔记
+│   ├── bilibili/                # 视频教程
+│   └── tasks/                   # Phase 设计说明书
+├── pyproject.toml               # 项目配置
+├── README.md                    # 项目说明
+└── LICENSE                      # MIT 开源协议
 ```
 
 ---

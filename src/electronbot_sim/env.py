@@ -620,13 +620,15 @@ class ElectronBotEnv:
     def _init_renderer(self):
         """初始化渲染器, 支持 EGL → OSMesa 自动回退 (对齐 §8.2.4)。"""
         try:
-            os.environ.setdefault("MUJOCO_GL", "egl")
+            os.environ["MUJOCO_GL"] = "egl"
             self.renderer = self._mujoco.Renderer(self.model, 480, 480)
+            logger.debug("渲染器: EGL 初始化成功")
         except (RuntimeError, ImportError) as e:
             logger.warning("E004 EGL 渲染不可用 (%s), 回退到 OSMesa", e)
             os.environ["MUJOCO_GL"] = "osmesa"
             try:
                 self.renderer = self._mujoco.Renderer(self.model, 480, 480)
+                logger.debug("渲染器: OSMesa 初始化成功")
             except RuntimeError as e2:
                 logger.error("OSMesa 也不可用, 禁用渲染: %s", e2)
                 self.renderer = None
@@ -637,7 +639,20 @@ class ElectronBotEnv:
             self._init_renderer()
         if self.renderer is None:
             return None
-        self.renderer.update_scene(self.data, camera="head_cam")
+        # 头灯已在 scene_tabletop.xml 中设置, 此处仅微调
+        cam = self._mujoco.MjvCamera()
+        cam.lookat[:] = [0, 0, 0.04]       # 机器人中心 z≈40mm
+        cam.distance = 0.25                 # 25cm 距离 (可看清整个桌面场景)
+        cam.azimuth = 145                   # 四分之三视角
+        cam.elevation = -25                 # 俯视25度
+        self._mujoco.mjv_updateScene(
+            self.model, self.data,
+            self._mujoco.MjvOption(),
+            self._mujoco.MjvPerturb(),
+            cam,
+            self._mujoco.mjtCatBit.mjCAT_ALL,
+            self.renderer.scene,
+        )
         return self.renderer.render()
 
     def _render_human(self):

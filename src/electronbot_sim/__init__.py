@@ -50,7 +50,7 @@ def __getattr__(name: str):
     if name == "ElectronBotActions":
         from .actions import ElectronBotActions
         return ElectronBotActions
-    raise AttributeError(f"module 'electronbot_sim' has no attribute {name!r}"")
+    raise AttributeError(f"module 'electronbot_sim' has no attribute {name!r}")
 
 
 __all__ = ["ElectronBotEnv", "ElectronBotBackend", "McpSimBridge",

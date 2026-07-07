@@ -41,7 +41,7 @@ import mujoco.viewer
 def main():
     # ── 模型路径 ──
     project = Path(__file__).resolve().parent.parent.parent
-    xml_path = project / "assets" / "mjcf" / "electronbot_full_arm.xml"
+    xml_path = project / "assets" / "mjcf" / "electronbot_scene.xml"
 
     if not xml_path.exists():
         print(f"错误: 模型文件不存在: {xml_path}")
@@ -101,13 +101,18 @@ def main():
     data = mujoco.MjData(model)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.distance = 0.3
+        # 根据模型包围盒自动调整相机，避免模型过大/过小导致显示不全
+        viewer.cam.lookat[:] = model.stat.center
+        viewer.cam.distance = model.stat.extent * 1.8
         viewer.cam.azimuth = 135
         viewer.cam.elevation = -20
 
-        while viewer.is_running():
-            mujoco.mj_step(model, data)
-            viewer.sync()
+        try:
+            while viewer.is_running():
+                mujoco.mj_step(model, data)
+                viewer.sync()
+        except KeyboardInterrupt:
+            print("\n[退出] 收到 Ctrl+C，关闭 viewer")
 
 
 if __name__ == "__main__":
