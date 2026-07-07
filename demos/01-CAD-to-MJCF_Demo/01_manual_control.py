@@ -126,7 +126,7 @@ if __name__ == "__main__":
             print("    2. 用程序控制演示 (无需桌面):")
             print("       MUJOCO_GL=egl python demos/01-CAD-to-MJCF_Demo/02_sequence_demo.py")
             print("    3. 直接用 mujoco.viewer 命令行:")
-            print("       python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml")
+            print("       python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_scene.xml")
             print("=" * 60)
         else:
             raise

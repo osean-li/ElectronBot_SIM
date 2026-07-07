@@ -6,8 +6,8 @@ Demo 2: 程序控制 — 自动执行预设动作序列
   # 有桌面 - 交互窗口实时演示
   python demos/01-CAD-to-MJCF_Demo/02_sequence_demo.py --interactive
 
-  # 无桌面 (SSH/服务器) - 生成帧序列和 GIF
-  MUJOCO_GL=egl python demos/01-CAD-to-MJCF_Demo/02_sequence_demo.py
+  # 无桌面 (SSH/服务器) - 生成帧序列和 GIF（脚本自动选 EGL）
+  python demos/01-CAD-to-MJCF_Demo/02_sequence_demo.py
 
   # 指定输出目录
   python demos/01-CAD-to-MJCF_Demo/02_sequence_demo.py --output /tmp/my_demo
@@ -16,6 +16,9 @@ Demo 2: 程序控制 — 自动执行预设动作序列
   [body_joint, head_joint, left_pitch_joint, left_roll_joint, right_pitch_joint, right_roll_joint]
 """
 from __future__ import annotations
+
+import os
+os.environ.setdefault("MUJOCO_GL", "egl")   # 无头渲染自动选 EGL 后端
 
 import sys
 import time
@@ -26,7 +29,7 @@ import numpy as np
 
 # ── 项目路径 ──
 PROJECT = Path(__file__).resolve().parent.parent.parent
-XML_PATH = PROJECT / "assets" / "mjcf" / "electronbot_full_arm.xml"
+XML_PATH = PROJECT / "assets" / "mjcf" / "electronbot_scene.xml"
 
 
 # ── 预设动作 (角度制) ──
@@ -97,16 +100,16 @@ def run_headless(xml_path: str, output_dir: str = "/tmp/electronbot_demo"):
     """无头模式: 渲染帧序列 → 图片 / GIF"""
     model = mujoco.MjModel.from_xml_path(xml_path)
     data = mujoco.MjData(model)
-    renderer = mujoco.Renderer(model, 480, 640)
+    renderer = mujoco.Renderer(model, 720, 960)
 
-    # 设置相机: 侧上方俯视, 同时展示机器人和棋盘格地面
-    camera = mujoco.MjvCamera()
-    camera.type = mujoco.mjtCamera.mjCAMERA_TRACKING
-    camera.trackbodyid = model.body("base_link").id
-    camera.distance = 0.28
-    camera.azimuth = 135
-    camera.elevation = -25
-    camera.lookat[:] = [0.0, 0.0, 0.05]
+    # 相机：自由相机，模型 mesh 为 mm 单位被解析为 m，整体约 70m 高，
+    # 因此相机距离需拉远到百米级，低角度以展示棋盘格地面
+    cam = mujoco.MjvCamera()
+    cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+    cam.distance = 280.0
+    cam.azimuth = 135
+    cam.elevation = 6
+    cam.lookat[:] = [0.0, 0.0, 31.0]
 
     frame_dir = Path(output_dir)
     frame_dir.mkdir(parents=True, exist_ok=True)
@@ -153,7 +156,7 @@ def run_headless(xml_path: str, output_dir: str = "/tmp/electronbot_demo"):
             mujoco.mj_step(model, data)
 
         if frame % 5 == 0:
-            renderer.update_scene(data, camera=camera)
+            renderer.update_scene(data, camera=cam)
             pixels = renderer.render()
             if pixels is not None:
                 try:

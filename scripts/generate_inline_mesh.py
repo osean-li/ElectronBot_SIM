@@ -214,6 +214,11 @@ def generate_mjcf(
 <mujoco model="electronbot">
   <compiler angle="radian" autolimits="true"/>
   <option timestep="0.002" integrator="implicitfast" cone="elliptic"/>
+  <visual>
+    <headlight ambient="0.15 0.18 0.25" diffuse="0.6 0.65 0.75" specular="0.05 0.05 0.08"/>
+    <rgba haze="0.01 0.02 0.05 0"/>
+    <global offwidth="960" offheight="720"/>
+  </visual>
   <default>
     <joint damping="4.0" armature="0.1" frictionloss="0.5"/>
     <position kp="500" kv="50" forcerange="-100 100" ctrllimited="true"/>
@@ -222,13 +227,16 @@ def generate_mjcf(
   </default>
 
   <asset>
-{mesh_assets}    <material name="mat_base" rgba="0.2 0.2 0.2 1.0"/>
+{mesh_assets}    <texture name="tex_grid" type="2d" builtin="checker" rgb1="0.1 0.1 0.15" rgb2="0.05 0.05 0.1" width="512" height="512"/>
+    <material name="mat_grid" texture="tex_grid" texrepeat="6 6" texuniform="true"/>
+    <material name="mat_base" rgba="0.2 0.2 0.2 1.0"/>
     <material name="mat_body" rgba="0.85 0.85 0.85 1.0"/>
     <material name="mat_head" rgba="0.3 0.3 0.3 1.0"/>
     <material name="mat_arm" rgba="0.6 0.6 0.6 1.0"/>
   </asset>
 
   <worldbody>
+    <geom name="ground" type="plane" size="20 20 0.01" pos="0 0 -0.01" material="mat_grid"/>
     <light name="light1" pos="0 0 1" dir="0 0 -1" directional="true"/>
     <light name="light2" pos="0.1 0.1 0.3"/>
 
@@ -237,37 +245,37 @@ def generate_mjcf(
 {'      <geom name="base_geom" type="mesh" mesh="base_link" mass="' + mass_map.get("base", "0.1") + '"/>' if "base" in body_meshes else '      <!-- 无 base mesh -->'}
 
       <!-- ===== 身体 (绕 Z 轴旋转腰部, ±90°) ===== -->
-      <body name="body" pos="0 0 0.03">
+      <body name="body" pos="0 0 0.053">
         <joint name="body_joint" type="hinge" axis="0 0 1" range="-1.5708 1.5708" limited="true"/>
 {'        <geom name="body_geom" type="mesh" mesh="body" mass="' + mass_map.get("torso", "0.1") + '"/>' if "torso" in body_meshes else '        <!-- 无 torso mesh -->'}
 
         <!-- ===== 头部 (绕 Y 轴俯仰, ±15°) ===== -->
-        <body name="head" pos="0 0 0.07">
+        <body name="head" pos="0 0 -0.005">
           <joint name="head_joint" type="hinge" axis="0 1 0" range="-0.2618 0.2618" limited="true"/>
 {'          <geom name="head_geom" type="mesh" mesh="head" mass="' + mass_map.get("head", "0.05") + '"/>' if "head" in body_meshes else '          <!-- 无 head mesh -->'}
         </body>
 
-          <!-- ===== 左臂: Pitch(X轴) + Roll(Z轴) ===== -->
-          <body name="left_shoulder" pos="0.025 0 0.065">
-            <joint name="left_shoulder_joint" type="hinge" axis="1 0 0" range="-1.5708 1.5708" limited="true"/>
-            <!-- arm mesh 挂在 shoulder 上: X轴Pitch旋转时上臂随之转动 -->
-{'            <geom name="left_arm_geom" type="mesh" mesh="left_arm" mass="' + mass_map.get("left_arm", "0.01") + '"/>' if "left_arm" in body_meshes else '            <!-- 无 left_arm mesh -->'}
+          <!-- ===== 左臂: Pitch(Y轴) + Roll(X轴) ===== -->
+          <body name="left_shoulder" pos="0.032 0 0.011">
+            <joint name="left_shoulder_joint" type="hinge" axis="0 1 0" range="-1.5708 1.5708" limited="true"/>
+            <!-- arm mesh 挂在 shoulder 上: Y轴Pitch旋转时上臂随之转动 -->
+{'            <geom name="left_arm_geom" type="mesh" mesh="left_arm" mass="' + mass_map.get("left_arm", "0.01") + '" material="mat_arm"/>' if "left_arm" in body_meshes else '            <!-- 无 left_arm mesh -->'}
             <body name="left_arm" pos="0 0.03 0">
-              <joint name="left_arm_roll_joint" type="hinge" axis="0 0 1" range="-0.7854 0.7854" limited="true"/>
-              <!-- Roll 关节(Z轴): 手部/末端小几何体 -->
-              <geom name="left_hand_geom" type="box" size="0.008 0.008 0.012" material="mat_arm"/>
+              <joint name="left_arm_roll_joint" type="hinge" axis="1 0 0" range="-0.7854 0.7854" limited="true"/>
+              <!-- Roll 关节(X轴): 手部/末端小几何体 -->
+              <geom name="left_hand_geom" type="box" size="0.006 0.006 0.010" material="mat_arm"/>
             </body>
           </body>
 
-          <!-- ===== 右臂: Pitch(X轴) + Roll(Z轴) ===== -->
-          <body name="right_shoulder" pos="-0.025 0 0.065">
-            <joint name="right_shoulder_joint" type="hinge" axis="1 0 0" range="-1.5708 1.5708" limited="true"/>
-            <!-- arm mesh 挂在 shoulder 上: X轴Pitch旋转时上臂随之转动 -->
-{'            <geom name="right_arm_geom" type="mesh" mesh="right_arm" mass="' + mass_map.get("right_arm", "0.01") + '"/>' if "right_arm" in body_meshes else '            <!-- 无 right_arm mesh -->'}
+          <!-- ===== 右臂: Pitch(Y轴) + Roll(X轴) ===== -->
+          <body name="right_shoulder" pos="-0.032 0 0.011">
+            <joint name="right_shoulder_joint" type="hinge" axis="0 1 0" range="-1.5708 1.5708" limited="true"/>
+            <!-- arm mesh 挂在 shoulder 上: Y轴Pitch旋转时上臂随之转动 -->
+{'            <geom name="right_arm_geom" type="mesh" mesh="right_arm" mass="' + mass_map.get("right_arm", "0.01") + '" material="mat_arm"/>' if "right_arm" in body_meshes else '            <!-- 无 right_arm mesh -->'}
             <body name="right_arm" pos="0 0.03 0">
-              <joint name="right_arm_roll_joint" type="hinge" axis="0 0 1" range="-0.7854 0.7854" limited="true"/>
-              <!-- Roll 关节(Z轴): 手部/末端小几何体 -->
-              <geom name="right_hand_geom" type="box" size="0.008 0.008 0.012" material="mat_arm"/>
+              <joint name="right_arm_roll_joint" type="hinge" axis="1 0 0" range="-0.7854 0.7854" limited="true"/>
+              <!-- Roll 关节(X轴): 手部/末端小几何体 -->
+              <geom name="right_hand_geom" type="box" size="0.006 0.006 0.010" material="mat_arm"/>
             </body>
           </body>
       </body>
@@ -275,24 +283,22 @@ def generate_mjcf(
   </worldbody>
 
   <actuator>
-    <!-- 按 DOF 顺序排列, 对齐参考项目 zhihui electronbot.xml:
-         body(Z轴±90°), head(Y轴±15°), L/R_shoulder(X轴Pitch±90°), L/R_arm(Z轴Roll±45°)
-         shoulder与head同级(都是body的子节点) -->
-    <position name="act_body" joint="body_joint" ctrlrange="-1.5708 1.5708" kp="300" kv="40"/>
-    <position name="act_head" joint="head_joint" ctrlrange="-0.2618 0.2618" kp="500" kv="50"/>
-    <position name="act_left_shoulder" joint="left_shoulder_joint" ctrlrange="-1.5708 1.5708" kp="500" kv="50"/>
-    <position name="act_left_arm" joint="left_arm_roll_joint" ctrlrange="-0.7854 0.7854" kp="500" kv="50"/>
-    <position name="act_right_shoulder" joint="right_shoulder_joint" ctrlrange="-1.5708 1.5708" kp="500" kv="50"/>
-    <position name="act_right_arm" joint="right_arm_roll_joint" ctrlrange="-0.7854 0.7854" kp="500" kv="50"/>
+    <!-- 按 DOF 顺序排列: body(Z), head(Y), L_shoulder_pitch(Y), L_arm_roll(X), R_shoulder_pitch(Y), R_arm_roll(X) -->
+    <position name="act_body"          joint="body_joint"           ctrlrange="-1.5708 1.5708" kp="80" kv="20"/>
+    <position name="act_head"          joint="head_joint"           ctrlrange="-0.2618 0.2618" kp="40" kv="10"/>
+    <position name="act_left_pitch"    joint="left_shoulder_joint"  ctrlrange="-1.5708 1.5708" kp="60" kv="15"/>
+    <position name="act_left_roll"     joint="left_arm_roll_joint"  ctrlrange="-0.7854 0.7854" kp="30" kv="8"/>
+    <position name="act_right_pitch"   joint="right_shoulder_joint" ctrlrange="-1.5708 1.5708" kp="60" kv="15"/>
+    <position name="act_right_roll"    joint="right_arm_roll_joint" ctrlrange="-0.7854 0.7854" kp="30" kv="8"/>
   </actuator>
 
   <sensor>
     <jointpos name="jpos_body" joint="body_joint"/>
     <jointpos name="jpos_head" joint="head_joint"/>
-    <jointpos name="jpos_left_shoulder" joint="left_shoulder_joint"/>
-    <jointpos name="jpos_left_arm" joint="left_arm_roll_joint"/>
-    <jointpos name="jpos_right_shoulder" joint="right_shoulder_joint"/>
-    <jointpos name="jpos_right_arm" joint="right_arm_roll_joint"/>
+    <jointpos name="jpos_left_pitch" joint="left_shoulder_joint"/>
+    <jointpos name="jpos_left_roll" joint="left_arm_roll_joint"/>
+    <jointpos name="jpos_right_pitch" joint="right_shoulder_joint"/>
+    <jointpos name="jpos_right_roll" joint="right_arm_roll_joint"/>
   </sensor>
 
   <keyframe>
@@ -388,7 +394,7 @@ def main():
             continue
         try:
             logger.info("\n[%s] 合并 %d 个文件:", body_name, len(files))
-            v, f, centroid = merge_meshes_for_body(files, scale=1.0, center=False)  # 保持STL原始mm单位(与参考zhihui项目一致)
+            v, f, centroid = merge_meshes_for_body(files, scale=0.001, center=True)  # STL mm → MuJoCo m, 居中到质心
             body_meshes[body_name] = (v, f, centroid)
             logger.info("  centroid: (%.4f, %.4f, %.4f)m", *centroid)
         except Exception as e:
