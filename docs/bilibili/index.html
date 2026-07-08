@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ElectronBot-SIM 教学书 · 目录</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">ElectronBot-SIM · 教学书</div>
+    <h1>桌面双臂机器人：从 CAD 仿真到 AI 训练与真机部署</h1>
+    <div class="chap-meta">
+      <span>9 章 · 23 节</span>
+      <span>每节约 10 分钟</span>
+      <span>MuJoCo / Gymnasium / MCP</span>
+    </div>
+  </header>
+  <main class="content">
+<h2>适宜读者</h2>
+<ul>
+  <li>想入门机器人 / 仿真 / 强化学习，但暂时没有硬件的同学；</li>
+  <li>熟悉 Python，想看懂一个完整机器人仿真项目如何搭起来的开发者；</li>
+  <li>正在做 Sim2Real、MCP、Gymnasium 相关实践，需要对照参考的工程师。</li>
+</ul>
+
+<h2>八层架构一览</h2>
+<table>
+  <tr><th>层</th><th>职责</th><th>对应章节</th></tr>
+  <tr><td>L1 模型描述</td><td>STEP → STL → MJCF 物理模型</td><td>第 2–3 章</td></tr>
+  <tr><td>L2 仿真引擎</td><td>MuJoCo 刚体动力学与渲染</td><td>第 4 章</td></tr>
+  <tr><td>L3 动作系统</td><td>6 舵机控制 + 12 种预设动作</td><td>第 4 章</td></tr>
+  <tr><td>L4 固件层</td><td>ESP32-S3 预编译烧录 + 源码编译</td><td>第 5、7 章</td></tr>
+  <tr><td>L5 协议层</td><td>MCP / JSON-RPC 桥接仿真与真机</td><td>第 6 章</td></tr>
+  <tr><td>L6 传感器</td><td>关节 / 相机 / 接触等观测</td><td>第 8 章</td></tr>
+  <tr><td>L7 决策层</td><td>BC / PPO / VLA 训练管线</td><td>第 8 章</td></tr>
+  <tr><td>L8 应用部署</td><td>Benchmark + Sim2Real 真机部署</td><td>第 9 章</td></tr>
+</table>
+
+<h2>详细目录（23 节）</h2>
+<table>
+  <tr><th>编号</th><th>标题</th><th>要点</th><th>阅读</th></tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 01 章 · 绪论</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">导论 · 全局</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">01.1</td>
+    <td><a href="第01章-绪论/01-01-项目背景.html">1.1 项目背景</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">ElectronBot · 仿真 · Sim2Real · MCP</td>
+    <td style="font-size:13.5px;">64 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 02 章 · 环境搭建与首次模型加载</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L1 模型描述层</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">02.1</td>
+    <td><a href="第02章-环境搭建与首次模型加载/02-01-确认环境依赖.html">2.1 章节目标</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">Python 3.11 · MuJoCo 3.x· Viewer</td>
+    <td style="font-size:13.5px;">64 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">02.2</td>
+    <td><a href="第02章-环境搭建与首次模型加载/02-02-首次加载模型.html">2.3 首次加载模型</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">Python 3.11 · MuJoCo 3.x· Viewer</td>
+    <td style="font-size:13.5px;">53 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">02.3</td>
+    <td><a href="第02章-环境搭建与首次模型加载/02-03-场景文件说明.html">2.4 场景文件说明</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">Python 3.11 · MuJoCo 3.x· Viewer</td>
+    <td style="font-size:13.5px;">62 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">02.4</td>
+    <td><a href="第02章-环境搭建与首次模型加载/02-04-实现过程记录.html">2.7 实现过程记录</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">Python 3.11 · MuJoCo 3.x· Viewer</td>
+    <td style="font-size:13.5px;">49 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 03 章 · 从STEP图纸到MJCF模型</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L1 模型描述层</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">03.1</td>
+    <td><a href="第03章-从STEP图纸到MJCF模型/03-01-三类文件的定位.html">3.1 章节目标</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">FreeCAD · STEP · STL · Inline Mesh</td>
+    <td style="font-size:13.5px;">72 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">03.2</td>
+    <td><a href="第03章-从STEP图纸到MJCF模型/03-02-FreeCAD 命令行导出 STL.html">3.4 FreeCAD 命令行导出 STL</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">FreeCAD · STEP · STL · Inline Mesh</td>
+    <td style="font-size:13.5px;">59 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">03.3</td>
+    <td><a href="第03章-从STEP图纸到MJCF模型/03-03-Inline Mesh 方案选择.html">3.5 Inline Mesh 方案选择</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">FreeCAD · STEP · STL · Inline Mesh</td>
+    <td style="font-size:13.5px;">53 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">03.4</td>
+    <td><a href="第03章-从STEP图纸到MJCF模型/03-04-生成 inline mesh XML.html">3.7 生成 inline mesh XML</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">FreeCAD · STEP · STL · Inline Mesh</td>
+    <td style="font-size:13.5px;">58 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">03.5</td>
+    <td><a href="第03章-从STEP图纸到MJCF模型/03-05-仿真稳定性调优.html">3.8 仿真稳定性调优</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">FreeCAD · STEP · STL · Inline Mesh</td>
+    <td style="font-size:13.5px;">55 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">03.6</td>
+    <td><a href="第03章-从STEP图纸到MJCF模型/03-06-场景拆分.html">3.9 场景拆分</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">FreeCAD · STEP · STL · Inline Mesh</td>
+    <td style="font-size:13.5px;">61 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 04 章 · Gymnasium环境与动作系统</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L2 仿真引擎 + L3 动作系统</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">04.1</td>
+    <td><a href="第04章-Gymnasium环境与动作系统/04-01-Gymnasium 环境封装.html">4.1 章节目标</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">Gymnasium · Env 封装 · obs_mode · 动作系统</td>
+    <td style="font-size:13.5px;">70 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">04.2</td>
+    <td><a href="第04章-Gymnasium环境与动作系统/04-02-动作系统.html">4.3 动作系统</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">Gymnasium · Env 封装 · obs_mode · 动作系统</td>
+    <td style="font-size:13.5px;">64 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 05 章 · 预编译固件烧录</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L5 固件层 — 先让真机跑起来</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">05.1</td>
+    <td><a href="第05章-预编译固件烧录/05-01-预编译固件烧录.html">5.1 预编译固件烧录</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">v2.2.6-2 · esptool · WebSocket · 配网</td>
+    <td style="font-size:13.5px;">8 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 06 章 · MCP协议层与统一后端</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L4 协议层 — 每写一个工具立刻真机验证</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">06.1</td>
+    <td><a href="第06章-MCP协议层与统一后端/06-01-MCP 协议格式.html">6.1 章节目标</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">MCP · JSON-RPC 2.0 · McpSimBridge · Backend</td>
+    <td style="font-size:13.5px;">69 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">06.2</td>
+    <td><a href="第06章-MCP协议层与统一后端/06-02-统一 Backend API.html">6.4 统一 Backend API</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">MCP · JSON-RPC 2.0 · McpSimBridge · Backend</td>
+    <td style="font-size:13.5px;">60 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">06.3</td>
+    <td><a href="第06章-MCP协议层与统一后端/06-03-MCP 工具清单.html">6.6 MCP 工具清单</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">MCP · JSON-RPC 2.0 · McpSimBridge · Backend</td>
+    <td style="font-size:13.5px;">61 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 07 章 · 源码编译与烧录</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L5 固件层</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">07.1</td>
+    <td><a href="第07章-源码编译与烧录/07-01-源码编译与烧录.html">7.1 源码编译与烧录</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">ESP-IDF v5.4 · idf.py · menuconfig · 分区表</td>
+    <td style="font-size:13.5px;">10 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 08 章 · AI训练管线</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L6 传感器 + L7 决策层</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">08.1</td>
+    <td><a href="第08章-AI训练管线/08-01-传感器模块.html">8.1 章节目标</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">传感器 · Behavior Cloning · PPO · 域随机化</td>
+    <td style="font-size:13.5px;">63 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">08.2</td>
+    <td><a href="第08章-AI训练管线/08-02-模仿学习——Behavior Cloning.html">8.3 模仿学习——Behavior Cloning</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">传感器 · Behavior Cloning · PPO · 域随机化</td>
+    <td style="font-size:13.5px;">67 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">08.3</td>
+    <td><a href="第08章-AI训练管线/08-03-域随机化.html">8.5 域随机化</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">传感器 · Behavior Cloning · PPO · 域随机化</td>
+    <td style="font-size:13.5px;">56 分钟</td>
+  </tr>
+  <tr style="background:#f3f6fb;"><td colspan="5"><b>第 09 章 · Sim2Real部署与验证</b>  <span style="color:var(--muted);font-weight:400;margin-left:10px;">L8 应用与部署</span></td></tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">09.1</td>
+    <td><a href="第09章-Sim2Real部署与验证/09-01-真机硬件规格.html">9.1 章节目标</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">ESP32 · WebSocket · 云端 API · 校准 · trim</td>
+    <td style="font-size:13.5px;">68 分钟</td>
+  </tr>
+  <tr>
+    <td style="text-align:center;color:var(--muted);">09.2</td>
+    <td><a href="第09章-Sim2Real部署与验证/09-02-部署问题排查.html">9.5 部署问题排查</a></td>
+    <td style="color:var(--muted);font-size:13.5px;">ESP32 · WebSocket · 云端 API · 校准 · trim</td>
+    <td style="font-size:13.5px;">59 分钟</td>
+  </tr>
+
+</table>
+
+<h2>本书特色</h2>
+<p>每节末尾均包含 <b>「设计文档 vs 实际实现」差异</b>。这些差异——而不是漂亮的架构图——才是本书最有价值的贡献。</p>
+
+<h2>如何阅读</h2>
+<ul>
+  <li><b>按顺序读</b>：每节承接上一节的产物，全序列导航保证你不会迷路；</li>
+  <li><b>动手做</b>：所有命令、脚本、参数均来自真实环境，可直接复现；</li>
+  <li><b>看差异</b>：遇到「设计 vs 实现」表，先想自己会怎么选，再对照作者的取舍。</li>
+</ul>
+  </main>
+  <nav class="chap-nav">
+    <a class="prev" href="第01章-绪论/第01章-绪论/01-01-项目背景.html">&larr; 从第 1 节开始</a>
+    <a class="home" href="index.html">目录</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+</body>
+</html>

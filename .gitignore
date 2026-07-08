@@ -97,6 +97,8 @@ datasets/
 raw_data/
 recordings/
 tools/FreeCAD_1.1.1-Linux-x86_64-py311.AppImage
+tools/websocat_amd64-linux
+bin/
 
 # ============================================================
 # Training Outputs & Logs

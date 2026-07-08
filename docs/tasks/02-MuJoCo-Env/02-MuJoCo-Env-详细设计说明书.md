@@ -6,9 +6,151 @@
 >
 > **输出**：`src/electronbot_sim/env.py`——可直接 `import` 使用的 Gymnasium 环境
 >
-> **文档版本**: v1.1  
-> **最后更新**: 2026-07-04  
-> **变更类型**: 补充软件工程规范章节
+> **文档版本**: v1.4  
+> **最后更新**: 2026-07-08  
+> **变更类型**: 代码对齐——ElectronBotEnv 正式继承 gymnasium.Env
+>
+> **硬件参考**：机器人模型来自于 ElectronBot 真机 STEP 原始设计，6 关节运动学参数与真机舵机一一对应（参见 [原版 vs 小智版差异 - 舵机系统](../../概要设计/ElectronBot-原版vs小智版-差异分析.md#5-舵机系统差异)）。
+
+---
+
+## 整体架构中的位置
+
+Phase 2（MuJoCo 基础仿真环境）是 ElectronBot-SIM **9 Phase 全链路** 中的仿真基础设施层，将 Phase 1 的物理模型封装为标准化 RL 环境。
+
+- **上游依赖**：Phase 1（CAD→MJCF）——需要完整的 `.xml` 物理模型
+- **下游支撑**：Phase 4（MCP+Action）——MCP Bridge 直接驱动本 Phase 的 `ElectronBotEnv`；Phase 6（Sensors）——传感器系统寄生在仿真环境之上
+- **核心价值**：所有后续 AI 训练、Benchmark 评估都在此环境上运行；环境质量 = 训练效果上限
+
+```mermaid
+graph LR
+    P1["Phase 1<br/>CAD→MJCF<br/>物理建模"] --> P2["⭐ Phase 2<br/>MuJoCo Env<br/>仿真环境"]
+    P2 --> P3["Phase 3<br/>固件烧录<br/>真机准备"]
+    P2 --> P4["Phase 4<br/>MCP+Action<br/>协议桥梁"]
+    P4 --> P5["Phase 5<br/>固件编译<br/>源码构建"]
+    P4 --> P6["Phase 6<br/>Sensors<br/>传感器系统"]
+    P6 --> P7["Phase 7<br/>AI训练<br/>策略学习"]
+    P7 --> P8["Phase 8<br/>Benchmark<br/>评估体系"]
+    P8 --> P9["Phase 9<br/>Sim2Real<br/>真机部署"]
+    P3 --> P4
+
+    style P2 fill:#a5d6a7,stroke:#2e7d32,stroke-width:4px,color:#1b5e20
+    style P1 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+    style P3 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+    style P4 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+    style P5 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+    style P6 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+    style P7 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+    style P8 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+    style P9 fill:#f5f5f5,stroke:#9e9e9e,color:#616161
+```
+
+### 本 Phase 实现过程
+
+```mermaid
+graph TD
+    A["📄 输入: MJCF XML 模型<br/>Phase 1 产物"] --> B["🔧 加载 MuJoCo 模型<br/>mjModel + mjData"]
+    B --> C["📦 封装 Gymnasium Env<br/>继承 gym.Env<br/>定义 action/obs space"]
+    C --> D["🔄 实现 reset()<br/>初始化关节位置<br/>域随机化参数采样"]
+    D --> E["⚡ 实现 step(action)<br/>10 次 mj_step 子步<br/>50Hz 控制频率"]
+    E --> F["👁️ 实现 render()<br/>human/rgb_array 双模式<br/>MuJoCo Renderer"]
+    F --> G["📋 注册环境<br/>gym.make('ElectronBot-v0')"]
+    G --> H["✅ 输出: ElectronBotEnv<br/>可直接 import 使用"]
+    
+    E --> I["🔄 交互调优循环"]
+    I -->|"参数不对"| C
+    I -->|"通过"| H
+
+    style A fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    style B fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
+    style C fill:#fff3e0,stroke:#e65100,color:#3e2723
+    style D fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    style E fill:#fce4ec,stroke:#c62828,color:#b71c1c
+    style F fill:#fff8e1,stroke:#f9a825,color:#5d4037
+    style G fill:#e8eaf6,stroke:#283593,color:#1a237e
+    style H fill:#a5d6a7,stroke:#2e7d32,stroke-width:3px,color:#1b5e20
+    style I fill:#e1bee7,stroke:#8e24aa,color:#4a148c
+```
+
+---
+
+## 0. 技术背景：Gymnasium
+
+Gymnasium 是 OpenAI Gym 的社区维护继任者，是强化学习领域事实上的**标准环境接口规范**。它定义了一套统一的 API（`reset → step → render → close`），使物理仿真、游戏、机器人控制等不同后端都可以通过相同的方式与 RL 算法交互。
+
+### 0.1 为何选择 Gymnasium
+
+在本项目中，Gymnasium 充当 **MuJoCo 物理引擎** 与 **RL 训练框架** 之间的桥梁：
+
+```
+RL 训练框架                          MuJoCo 物理引擎
+(Stable-Baselines3 / CleanRL)        (刚体动力学仿真)
+        │                                    │
+        └────────── Gymnasium ───────────────┘
+                   (统一接口层)
+              ElectronBotEnv(gym.Env)
+              ├── action_space: Box(6,)
+              ├── observation_space: Dict{...}
+              ├── reset() → obs, info
+              ├── step(action) → obs, reward, done, info
+              └── render() → frame | None
+```
+
+不直接使用 MuJoCo 原生 API 的原因：
+
+| 考量 | 说明 |
+|------|------|
+| **生态兼容性** | Stable-Baselines3、CleanRL、Ray RLLib 等主流框架均以 Gymnasium 接口为输入，遵循该规范即可零成本接入 |
+| **可复现性** | `seed` 参数统一控制随机性，`info` 字典承载调试元数据 |
+| **向量化加速** | `gym.vector` / `EnvPool` 等工具可透明地将单环境包装为并行环境，无需修改环境代码 |
+| **社区惯用范式** | 研究者熟悉 `env.step()` 交互循环，降低协作与复现门槛 |
+
+### 0.2 核心概念
+
+#### 0.2.1 动作空间（Action Space）
+
+定义策略可以输出的动作格式。`gym.spaces.Box` 表示连续值向量，`gym.spaces.Discrete` 表示离散选项。本环境使用 `Box(6,)`，值为 6 个关节的角度增量（度）。
+
+#### 0.2.2 观测空间（Observation Space）
+
+定义环境返回给策略的状态格式。支持嵌套结构，本环境使用 `gym.spaces.Dict`，按语义分组的字典观测比扁平向量更易于调试和理解。
+
+#### 0.2.3 step() 的五元组返回值
+
+每次 `step(action)` 返回 `(obs, reward, terminated, truncated, info)`：
+
+| 返回值 | 类型 | 语义 |
+|--------|------|------|
+| `obs` | 与 `observation_space` 匹配 | 当前状态观测 |
+| `reward` | `float` | 即时奖励信号 |
+| `terminated` | `bool` | 任务成功/失败（如机器人摔倒），episode 应终止 |
+| `truncated` | `bool` | 超时截断（达到 `max_episode_steps`），episode 应终止但不算失败 |
+| `info` | `dict` | 调试信息（关节限位触及、控制能耗、fps 等） |
+
+> **terminated vs truncated 分离**（Gymnasium ≥ 0.26 引入）是区分"环境自身终止"和"外部超时截断"的关键设计，RL 算法据此决定是否将终止状态作为负样本学习。
+
+#### 0.2.4 环境注册
+
+Gymnasium 支持通过字符串 ID 注册环境，使 `gym.make("ElectronBot-v0")` 即可创建实例：
+
+```python
+from gymnasium.envs.registration import register
+
+register(
+    id="ElectronBot-v0",
+    entry_point="electronbot_sim.env:ElectronBotEnv",
+    max_episode_steps=1000,
+)
+```
+
+### 0.3 与 MuJoCo 的关系
+
+| 层面 | MuJoCo | Gymnasium（本环境） |
+|------|--------|-------------------|
+| 物理状态 | `mjData.qpos` / `qvel` | `obs["joint_pos"]` / `obs["joint_vel"]`（已转为度） |
+| 控制输入 | `mjData.ctrl`（原始力矩/位置目标） | `action`（6 维角度增量，度） |
+| 仿真推进 | `mj_step()` | `step()`（内部调用 10 次 `mj_step1/mj_step2`，封装为 50Hz） |
+| 模型定义 | MJCF XML | `action_space` / `observation_space`（类型安全的接口契约） |
 
 ---
 
@@ -188,6 +330,129 @@ def step(self, action):
     
     return obs, 0.0, False, False, {}
 ```
+
+### 2.5 ElectronBotEnv 核心功能详解
+
+除了 Gymnasium 标准接口（`reset` / `step` / `render` / `close`）外，`ElectronBotEnv` 还实现了以下专为 ElectronBot 机器人设计的核心功能。
+
+#### 2.5.1 舵机↔机械关节双向映射
+
+这是 ElectronBotEnv 区别于通用 MuJoCo 环境的最关键设计。真机的舵机角度与仿真中的机械关节角度之间存在**非线性映射关系**，由三个参数决定：
+
+```
+joint_angle = (servo_angle - SERVO_CENTER[i]) × SERVO_RATIO[i] × SERVO_DIRECTION[i]
+servo_angle = joint_angle / (SERVO_RATIO[i] × SERVO_DIRECTION[i]) + SERVO_CENTER[i]
+```
+
+| 参数 | 含义 | 示例（头部） |
+|------|------|------------|
+| `SERVO_CENTER` | 舵机中心角度（度） | `HEAD=90°` |
+| `SERVO_RATIO` | 舵机范围 / 机械范围比值 | `HEAD=60°/30°=2.0` |
+| `SERVO_DIRECTION` | 方向符号（+1 同向 / -1 反向） | `RP/RR=-1`（右臂反向） |
+
+**全项目单一数据源**：以下 6 组常量定义在 `env.py` 中，`McpSimBridge`、`ElectronBotActions` 等模块必须从此处导入，禁止多处置复定义：
+
+```python
+# 关节顺序: [RP, RR, LP, LR, BODY, HEAD]
+SERVO_CENTER    = np.array([180.0, 140.0, 0.0,  40.0, 90.0, 90.0])
+SERVO_RATIO     = np.array([1.0,   1.125, 1.0,  1.125,1.5,  2.0])
+SERVO_DIRECTION = np.array([-1.0,  -1.0,  1.0,  1.0,  1.0,  1.0])
+```
+
+**派生数据**（由 SERVO_* 常量 + 固件安全范围自动推算）：
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `SERVO_LIMITS` | `{(0,180),(100,180),(0,180),(0,80),(30,150),(75,105)}` | 对齐固件 `ClampServoTarget()` |
+| `SERVO_HOME` | `[180, 180, 0, 0, 90, 90]` | 对齐固件 `servo_initial` |
+| `JOINT_MIN` | `[-90, -45, -90, -45, -90, -30]` | 机械关节下界（度） |
+| `JOINT_MAX` | `[90, 45, 90, 45, 90, 30]` | 机械关节上界（度） |
+| `HOME_QPOS` | `[0, -45, 0, -45, 0, 0]` | home 姿态机械关节角度（度） |
+| `SERVO_NAME_TO_INDEX` | `{"rp":0, "rr":1, "lp":2, "lr":3, "b":4, "h":5, ...}` | 舵机名称→索引映射 |
+
+**转换函数**（供外部模块复用）：
+
+| 函数 | 功能 |
+|------|------|
+| `servo_to_joint(idx, angle)` | 单舵机角度 → 单关节角度 |
+| `joint_to_servo(idx, angle)` | 单关节角度 → 单舵机角度 |
+| `servo_array_to_joint_array(arr)` | 6 维舵机 → 6 维关节（批量） |
+| `joint_array_to_servo_array(arr)` | 6 维关节 → 6 维舵机（批量） |
+| `clamp_servo_target(idx, angle)` | 舵机安全角度裁剪（对齐固件，返回 int） |
+
+#### 2.5.2 角度单位三层约定
+
+全项目强制执行三级角度单位隔离，避免 `57.3×`（180/π）量级偏差：
+
+```
+┌─────────────────────────────────────────────┐
+│  Python 层 (mcp_bridge / actions / sensors)  │
+│  运算单位: 度 °                              │
+│  示例: joint_pos = [-45.0, 0.0, ...]        │
+├─────────────────────────────────────────────┤
+│  转换边界 (env.py 统一管控)                   │
+│  读 qpos → np.degrees()                     │
+│  写 ctrl → np.radians()                     │
+├─────────────────────────────────────────────┤
+│  MuJoCo 层 (data.qpos / data.ctrl / qvel)   │
+│  存储单位: 弧度 rad                           │
+│  注意: 即使 MJCF 设了 angle="degree", 运行   │
+│        时 data.* 仍为弧度                    │
+└─────────────────────────────────────────────┘
+```
+
+**严禁**任何外部模块直接写度数到 `data.ctrl`——必须通过 `apply_joint_targets_deg()` 入口。
+
+#### 2.5.3 Bridge / Actions 专用接口
+
+为 `McpSimBridge` 和 `ElectronBotActions` 提供独立于 Gymnasium 标准 API 的底层控制接口：
+
+| 方法 | 签名 | 用途 |
+|------|------|------|
+| `apply_joint_targets_deg` | `(joint_angles_deg: ndarray)` | **唯一合法的写 ctrl 入口**——接收 6 维机械关节角度（度），内部裁剪到限位、转弧度后写入 `data.ctrl` |
+| `step_simulation` | `(substeps: int = None) → bool` | **推进物理仿真的唯一入口**——不构建观测、不计算奖励、不递增 step_count，仅供 Bridge 多步插值时调用。返回 True 表示仿真状态合法 |
+| `is_state_valid` | `() → bool` | 公开的 NaN/爆炸状态检测 |
+| `get_commanded_joint_pos` | `() → ndarray` | 获取最后指令的关节角度（度），供 realistic 观测模式使用 |
+| `set_moving_state` | `(is_moving: bool)` | 运动状态标志，供 Actions 在插值开始/结束时调用 |
+| `get_battery_info` | `() → dict` | 返回 `{"voltage", "percent", "is_charging"}`，供 `battery.get_level` MCP 工具使用 |
+| `get_servo_angles` | `() → ndarray` | 由机械关节角度反推舵机角度（度），供 `get_trims` / `get_status` 等 MCP 工具使用 |
+
+#### 2.5.4 realistic 观测模式的实际内容
+
+文档 §6.2.2 中描述的 `realistic` 模式仅保留 `joint_pos` 和 `head_angle`，实际代码中的 `realistic` 模式更进一步——**完全不依赖 MuJoCo 传感器读数**，仅包含真机固件可直接获取的信息：
+
+| 字段 | 类型 | 来源 | 说明 |
+|------|------|------|------|
+| `commanded_joint_pos` | `Box(6,)` | `self._last_commanded` | 最后指令的关节目标角度（固件可记录），而非 MuJoCo 实际 qpos |
+| `is_moving` | `Box(1,)` | `self._is_moving` | 布尔标志（0/1），表示是否有非零动作在执行中 |
+| `battery_voltage` | `Box(1,)` | `dr_params.battery_voltage` | 电池电压（V），范围 3.5-4.2 |
+| `battery_percent` | `Box(1,)` | 由电压线性换算 | 电量百分比 `(V-3.0)/1.2×100`，范围 0-100 |
+
+这样设计的目的是**消除 Sim2Real Gap**——策略在仿真中仅依赖 `commanded_joint_pos`（指令目标）而非 `joint_pos`（实际位置），因为真机没有编码器反馈实际位置。将电池状态纳入观测也让策略能够感知执行器增益随电压的变化。
+
+#### 2.5.5 便捷访问属性
+
+| 属性/方法 | 类型 | 说明 |
+|-----------|------|------|
+| `joint_min` | `property → ndarray` | 关节下界（度） |
+| `joint_max` | `property → ndarray` | 关节上界（度） |
+| `np_random` | `property → Generator` | 环境独立随机数生成器 |
+| `get_joint_positions()` | `() → ndarray` | `_get_joint_angles_deg()` 别名 |
+| `get_ee_position(name)` | `(str) → ndarray` | 末端执行器世界坐标（m） |
+
+#### 2.5.6 仿真子步数动态计算
+
+与设计文档中固定 `nsubsteps=10` 不同，实际实现采用**动态子步数**：
+
+```python
+substeps = max(1, int(self.dt / self.model.opt.timestep))
+```
+
+这确保在 MJCF 模型改变 `timestep` 参数时，`step()` 仍然推进精确 `0.02s` 的仿真时间，避免帧率漂移。
+
+#### 2.5.7 human 渲染模式延迟初始化
+
+`human` 模式使用 `mujoco.viewer.launch_passive`（非阻塞 viewer），且在首次 `render()` 时延迟初始化。这避免了在无头 CI 环境中 `__init__` 时就因 GLFW 不可用而崩溃。失败时自动回退到 `rgb_array` 模式。
 
 ---
 
@@ -821,3 +1086,6 @@ logger.info(
 |------|------|---------|------|
 | v1.0 | 2026-07-03 | 初始版本：完成 1-5 章（预期效果、架构设计、实现步骤、验证方法、交付物清单） | 架构组 |
 | v1.1 | 2026-07-04 | 补充软件工程规范章节：新增接口设计（6）、数据模型（7）、错误处理与恢复（8）、配置管理（9）、日志与可观测性（10）、风险评估（11）、变更记录（12）；追加文档元数据 | 架构组 |
+| v1.2 | 2026-07-08 | 新增第 0 章技术背景：Gymnasium 介绍，含选型理由、核心概念（动作/观测空间、step 五元组、terminated vs truncated）、环境注册机制、与 MuJoCo 的关系对照 | 架构组 |
+| v1.3 | 2026-07-08 | 新增 §2.5 ElectronBotEnv 核心功能详解：舵机↔关节双向映射系统（全项目单一数据源）、角度单位三层约定、Bridge/Actions 专用接口（7 个底层控制方法）、realistic 观测模式实际内容（4 字段 vs 文档旧描述）、便捷访问属性、动态子步数、human 延迟初始化 | 架构组 |
+| v1.4 | 2026-07-08 | 代码对齐文档：`env.py` 中 `ElectronBotEnv` 由鸭子类型改为正式 `class ElectronBotEnv(gym.Env)` 继承，`__init__` 调用 `super().__init__()`，`reset()` 通过 `super().reset(seed=seed)` 初始化 np_random。支持 `isinstance` 检查、`gym.vector` 向量化、SB3 训练管线 | 架构组 |

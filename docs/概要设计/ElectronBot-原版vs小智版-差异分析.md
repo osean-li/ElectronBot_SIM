@@ -79,6 +79,8 @@
 
 **关键区别：原版依赖 PC 作为运算和控制中心；小智版完全独立运行，通过云端 AI 获得智能。**
 
+![ElectronBot 小智AI版 实物](images/electronbot_product.png)
+
 ---
 
 ## 3. 核心主控差异
@@ -395,6 +397,9 @@ ESP32-S3 (LVGL渲染) → SPI → GC9A01
 |------|------|
 | **单块集成主板** | ESP32-S3 主控 + 音频(麦克风+功放+喇叭) + LCD接口 + 舵机接口 + 电源管理 + 电池充电 |
 
+![PCB 集成主板 1](images/img_PCB_PCB1.png)
+![PCB 集成主板 2](images/img_PCB_PCB3.png)
+
 **PCB 设计托管**：[立创开源平台](https://oshwhub.com/txp666/electronbot-ai)
 
 **关键差异：原版4板互联、舵机内嵌MCU的分布式架构 vs 小智版1板集成的集中式架构。集成度大幅提高，制造门槛显著降低。**
@@ -596,6 +601,9 @@ ElectronBot-fw/
 | **焊接难度** | **极高**（微型舵机PCB手焊 STM32F042 + FM116B） | **中等**（ESP32模组 + 通用舵机接口） |
 | **维护性** | 舵机故障需自制替换PCB | 舵机故障直接购买替换 |
 | **可复现性** | 低（舵机PCB自制难度极大） | 高（PCB厂家打样，标准零件） |
+
+![焊接参考：麦克风与功放焊接要点](images/img_Soldering_7.png)
+![焊接参考：ESP32 底部焊盘与 LED](images/img_Soldering_8.png)
 
 ---
 

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2.4 场景文件说明 · 第 02 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 02 章 · L1 模型描述层  —  子章节 4/21</div>
+    <h1>2.4 场景文件说明</h1>
+    <div class="chap-meta">
+      <span>阅读约 8 分钟</span>
+      <span>1,892 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">MJCF include</span><span class="kw">scene文件</span><span class="kw">worldbody</span><span class="kw">visual</span><span class="kw">asset</span><span class="kw">inline mesh</span><span class="kw">geom</span><span class="kw">设计vs实现</span></div>
+  </header>
+  <div class="section-background">
+  <div class="bg-title">📖 本节背景</div>
+  <div class="bg-body">本书所有操作统一使用 `electronbot_scene.xml` 作为主文件。场景文件通过 `<include file="electronbot.xml"/>` 引用机器人模型（见代码清单 2-1），自身仅管理棋盘格地面、渐变天空和灯光等视觉效果，场景元素可通过修改 `<visual>`、`<asset>` 及 `<worldbody>` 中的参数自由调整。</div>
+</div>
+  
+  
+  <div class="knowledge-card summary">
+  <div class="kc-header">本节要点</div>
+  <div class="kc-body"><p>本书所有操作统一使用 `electronbot_scene.xml` 作为主文件。场景文件通过 `<include file="electronbot.xml"/>` 引用机器人模型（见代码清单 2-1），自身仅管理棋盘格地面、渐变天空和灯…</p></div>
+  <div class="kc-tags"><span class="kc-tag">Python 3.11</span><span class="kc-tag">MuJoCo 3.x</span><span class="kc-tag">Viewer</span></div>
+</div>
+  <figure class="flow-diagram">
+<svg viewBox="0 0 680 150" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ea2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2f6f4f"/></marker></defs>
+<text x="340" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="#1a5c3a">MJCF 场景文件加载链路</text>
+<rect x="20" y="45" width="130" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="85" y="72" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">electronbot.xml</text>
+<line x1="150" y1="67" x2="178" y2="67" stroke="#2f6f4f" stroke-width="2" marker-end="url(#ea2)"/>
+<rect x="180" y="45" width="130" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="245" y="72" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">scene_single.xml</text>
+<line x1="310" y1="67" x2="338" y2="67" stroke="#2f6f4f" stroke-width="2" marker-end="url(#ea2)"/>
+<rect x="340" y="45" width="130" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="405" y="72" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">scene_head.xml</text>
+<line x1="470" y1="67" x2="498" y2="67" stroke="#2f6f4f" stroke-width="2" marker-end="url(#ea2)"/>
+<rect x="500" y="45" width="140" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="570" y="72" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">scene_dual.xml</text>
+<text x="340" y="120" text-anchor="middle" font-size="11" fill="#3a6b4f">electronbot.xml 为公共基础模型，scene_*.xml 组合不同的手臂配置</text>
+</svg><figcaption>场景文件层次：基础模型 + 三种手臂配置</figcaption></figure>
+  <main class="content">
+<h2>2.4 场景文件说明</h2>
+<p>本书所有操作统一使用 <code>electronbot_scene.xml</code> 作为主文件。场景文件通过 <code>&lt;include file="electronbot.xml"/&gt;</code> 引用机器人模型（见代码清单 2-1），自身仅管理棋盘格地面、渐变天空和灯光等视觉效果，场景元素可通过修改 <code>&lt;visual&gt;</code>、<code>&lt;asset&gt;</code> 及 <code>&lt;worldbody&gt;</code> 中的参数自由调整。</p>
+<pre><code class="language-xml">&lt;!-- 代码清单 2-1 electronbot_scene.xml 结构 --&gt;
+&lt;mujoco model=&quot;electronbot scene&quot;&gt;
+  &lt;include file=&quot;electronbot.xml&quot;/&gt;
+
+  &lt;visual&gt;
+    &lt;headlight diffuse=&quot;0.8 0.8 0.8&quot; ambient=&quot;0.4 0.4 0.4&quot; specular=&quot;0.1 0.1 0.1&quot;/&gt;
+    &lt;rgba haze=&quot;0.15 0.25 0.35 1&quot;/&gt;
+    &lt;global azimuth=&quot;-130&quot; elevation=&quot;-20&quot; offwidth=&quot;960&quot; offheight=&quot;720&quot;/&gt;
+  &lt;/visual&gt;
+
+  &lt;asset&gt;
+    &lt;texture type=&quot;skybox&quot; builtin=&quot;gradient&quot;
+             rgb1=&quot;0.3 0.5 0.7&quot; rgb2=&quot;0 0 0&quot; width=&quot;512&quot; height=&quot;3072&quot;/&gt;
+    &lt;texture type=&quot;2d&quot; name=&quot;groundplane&quot; builtin=&quot;checker&quot; mark=&quot;edge&quot;
+             rgb1=&quot;0.50 0.60 0.72&quot; rgb2=&quot;0.06 0.13 0.22&quot;
+             markrgb=&quot;0.9 0.9 0.9&quot; width=&quot;300&quot; height=&quot;300&quot;/&gt;
+  &lt;/asset&gt;
+
+  &lt;worldbody&gt;
+    &lt;light pos=&quot;0 0 1.5&quot; dir=&quot;0 0 -1&quot; directional=&quot;true&quot;/&gt;
+    &lt;geom name=&quot;floor&quot; type=&quot;plane&quot; material=&quot;groundplane&quot;/&gt;
+  &lt;/worldbody&gt;
+&lt;/mujoco&gt;
+</code></pre>
+<p><code>assets/mjcf/</code> 目录下同时存在 <code>electronbot_full_arm.xml</code>（模型与场景未拆分的单文件版本），可作为参考，但后续课程不再使用。</p>
+<h2>2.5 模型结构快速检查</h2>
+<p>除可视化验证外，亦可通过 Python 脚本快速获取模型的结构化信息：</p>
+<pre><code class="language-bash">python3 -c &quot;
+import mujoco
+m = mujoco.MjModel.from_xml_path('assets/mjcf/electronbot_scene.xml')
+print(f'刚体数: {m.nbody}')
+print(f'关节数: {m.njnt}')
+print(f'执行器数: {m.nu}')
+print(f'几何体数: {m.ngeom}')
+&quot;
+</code></pre>
+<p>预期输出：刚体 7，关节 6，执行器 6，几何体 6。</p>
+<h2>2.6 本章小结</h2>
+<p>本章完成了环境搭建与首次模型加载验证。实际实现与概要设计文档的差异总结如下：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>设计文档 v1.2</th>
+<th>实际实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>输出文件名</td>
+<td><code>electronbot_mesh.xml</code></td>
+<td><code>electronbot_scene.xml</code>（场景文件）<br><code>electronbot.xml</code>（模型本体）</td>
+</tr>
+<tr>
+<td>STL 导出方式</td>
+<td>24 零件分别导出</td>
+<td>按运动组合并导出为 5 组</td>
+</tr>
+<tr>
+<td>积分器</td>
+<td>implicitfast</td>
+<td>RK4（稳定性问题）</td>
+</tr>
+<tr>
+<td>场景文件</td>
+<td>2 个独立场景文件</td>
+<td>统一为 <code>electronbot_scene.xml</code></td>
+</tr>
+<tr>
+<td>关节命名</td>
+<td>joint_body / joint_head / joint_lp</td>
+<td>body_joint / head_joint / left_pitch_joint</td>
+</tr>
+</tbody>
+</table>
+<p>下一章将从上游开始，完整演示从 STEP 原始 CAD 到 MJCF 模型的生成流程。</p>
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>STL</td><td>三角网格格式，广泛用于 3D 打印与仿真模型的几何表示。</td></tr>
+  </table>
+</div>
+  
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 实现逻辑</div>
+  <ol>
+    <li>2.4 场景文件说明</li>
+    <li>2.5 模型结构快速检查</li>
+    <li>2.6 本章小结</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    <a class="prev" href="../第02章-环境搭建与首次模型加载/02-02-首次加载模型.html">&larr; 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第02章-环境搭建与首次模型加载/02-04-实现过程记录.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

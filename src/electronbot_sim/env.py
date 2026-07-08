@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+import gymnasium as gym
 import numpy as np
 
 logger = logging.getLogger("electronbot_sim.env")
@@ -160,11 +161,11 @@ class DomainRandomizationParams:
     actuator_gain_scale: float = 1.0  # 由 battery_voltage/4.2 派生
 
 
-class ElectronBotEnv:
+class ElectronBotEnv(gym.Env):
     """ElectronBot Gymnasium 强化学习环境。
 
-    Layer 2 物理仿真封装, 严格遵循 Gymnasium 标准 API,
-    可被 Stable-Baselines3 / CleanRL / Ray RLLib 直接 make 与向量化包装。
+    Layer 2 物理仿真封装, 继承 gymnasium.Env, 严格遵循标准 API,
+    可被 Stable-Baselines3 / CleanRL / Ray RLLib / gym.vector 直接使用。
 
     参数:
         render_mode: None / "human" / "rgb_array"
@@ -180,8 +181,7 @@ class ElectronBotEnv:
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
     def __init__(self, render_mode: Optional[str] = None, **kwargs: Any):
-        # Gymnasium 兼容 (允许 gym.make 传入 render_mode)
-        import gymnasium as gym
+        super().__init__()
 
         # ─── 动作空间: 6 关节角度增量 (度/步) ───
         self.action_space = gym.spaces.Box(
@@ -298,17 +298,8 @@ class ElectronBotEnv:
         返回: (obs, info)
             info 含 domain_randomization 参数快照、object_positions、seed
         """
-        import gymnasium as gym
-        super_self = None
-        # 调用 gym.Env.reset 以初始化 np_random (如适用)
-        if seed is not None:
-            try:
-                import gymnasium as gym
-                # ElectronBotEnv 未继承 gym.Env, 用独立 RNG
-                pass
-            except Exception:
-                pass
-        self._np_random = np.random.default_rng(seed)
+        # 通过父类标准机制初始化 np_random
+        super().reset(seed=seed)
 
         # 1. 清零 qfrc_applied (关键, 防残留, 对齐 §8.2.3)
         self.data.qfrc_applied[:] = 0

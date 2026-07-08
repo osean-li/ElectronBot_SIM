@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.5 域随机化 · 第 06 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 06 章 · L5 传感器 + L6 决策层  —  子章节 19/21</div>
+    <h1>6.5 域随机化</h1>
+    <div class="chap-meta">
+      <span>阅读约 6 分钟</span>
+      <span>1,464 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">传感器</span><span class="kw">Behavior Cloning</span><span class="kw">PPO</span><span class="kw">域随机化</span><span class="kw">Benchmark</span><span class="kw">奖励函数</span></div>
+  </header>
+  <div class="section-background">
+  <div class="bg-title">📖 本节背景</div>
+  <div class="bg-body">为缩小仿真与真机的差距，在每次 `env.reset()` 时随机化物理参数： def apply_domain_randomization(self): import random for i in range(self.model.njnt):</div>
+</div>
+  
+  
+  <div class="knowledge-card summary">
+  <div class="kc-header">本节要点</div>
+  <div class="kc-body"><p>为缩小仿真与真机的差距，在每次 `env.reset()` 时随机化物理参数：</p></div>
+  <div class="kc-tags"><span class="kc-tag">传感器</span><span class="kc-tag">Behavior Cloning</span><span class="kc-tag">PPO</span><span class="kc-tag">域随机化</span></div>
+</div>
+  
+  <main class="content">
+<h2>6.5 域随机化</h2>
+<p>为缩小仿真与真机的差距，在每次 <code>env.reset()</code> 时随机化物理参数：</p>
+<pre><code class="language-python">def apply_domain_randomization(self):
+    import random
+
+    for i in range(self.model.njnt):
+        self.model.damping[i] *= random.uniform(0.8, 1.2)      # 阻尼 ±20%
+        self.model.frictionloss[i] *= random.uniform(0.5, 1.5) # 摩擦 ±50%
+
+    for i in range(self.model.nbody):
+        self.model.body_mass[i] *= random.uniform(0.85, 1.15)  # 质量 ±15%
+
+    for i in range(self.model.nu):
+        self.model.actuator_gain[i] *= random.uniform(0.9, 1.1) # 增益 ±10%
+</code></pre>
+<p>随机化参数范围：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th style="text-align: center;">范围</th>
+<th>模拟的物理差异</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>关节摩擦</td>
+<td style="text-align: center;">±50%</td>
+<td>3D 打印公差 + 润滑差异</td>
+</tr>
+<tr>
+<td>关节阻尼</td>
+<td style="text-align: center;">±20%</td>
+<td>舵机齿轮阻尼</td>
+</tr>
+<tr>
+<td>执行器增益</td>
+<td style="text-align: center;">±10%</td>
+<td>舵机个体差异</td>
+</tr>
+<tr>
+<td>零件质量</td>
+<td style="text-align: center;">±15%</td>
+<td>PLA 密度不均匀</td>
+</tr>
+<tr>
+<td>观测噪声</td>
+<td style="text-align: center;">0-0.5°</td>
+<td>无编码器开环漂移</td>
+</tr>
+</tbody>
+</table>
+<p>效果对比：</p>
+<table>
+<thead>
+<tr>
+<th>训练方式</th>
+<th style="text-align: center;">仿真成功率</th>
+<th style="text-align: center;">真机迁移成功率</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>无域随机化</td>
+<td style="text-align: center;">95%</td>
+<td style="text-align: center;">~40%</td>
+</tr>
+<tr>
+<td>有域随机化</td>
+<td style="text-align: center;">92%</td>
+<td style="text-align: center;">~70-80%</td>
+</tr>
+</tbody>
+</table>
+<h2>6.6 Benchmark 任务定义</h2>
+<p>平台定义了 7 个标准化评估任务：</p>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>核心目标</th>
+<th style="text-align: center;">难度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>reach</td>
+<td>末端到达目标点</td>
+<td style="text-align: center;">★☆☆</td>
+</tr>
+<tr>
+<td>push</td>
+<td>推动物体到指定区域</td>
+<td style="text-align: center;">★★☆</td>
+</tr>
+<tr>
+<td>pick_place</td>
+<td>抓取并放置物体</td>
+<td style="text-align: center;">★★★</td>
+</tr>
+<tr>
+<td>stack</td>
+<td>堆叠积木</td>
+<td style="text-align: center;">★★★</td>
+</tr>
+<tr>
+<td>follow</td>
+<td>跟踪移动目标</td>
+<td style="text-align: center;">★★☆</td>
+</tr>
+<tr>
+<td>gesture</td>
+<td>做出指定手势</td>
+<td style="text-align: center;">★★☆</td>
+</tr>
+<tr>
+<td>dance</td>
+<td>跟随节奏运动</td>
+<td style="text-align: center;">★★★</td>
+</tr>
+</tbody>
+</table>
+<p>每个任务包含三个要素：奖励函数、初始状态分布、终止条件。</p>
+<h2>6.7 本章小结</h2>
+<p>本章完成了 AI 训练管线的核心实现。与设计文档的主要差异：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>设计文档</th>
+<th>实际实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>传感器</td>
+<td>Camera / Joint / Contact</td>
+<td>先实现了 Joint + Camera 两个核心传感器</td>
+</tr>
+<tr>
+<td>观测模式</td>
+<td>full / realistic</td>
+<td>已实现双模式</td>
+</tr>
+<tr>
+<td>RL 框架</td>
+<td>SB3 → cleanRL → Isaac Lab 渐进</td>
+<td>当前基于 SB3</td>
+</tr>
+<tr>
+<td>域随机化参数</td>
+<td>5 个参数</td>
+<td>已实现阻尼、摩擦、质量、增益 4 个</td>
+</tr>
+</tbody>
+</table>
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>Behavior Cloning</td><td>行为克隆：从专家演示数据中监督学习策略的模仿学习方法。</td></tr>
+    <tr><td>PPO</td><td>Proximal Policy Optimization，一种稳定高效的策略梯度强化学习算法。</td></tr>
+  </table>
+</div>
+  <div class="code-index">
+  <div class="ci-title">📂 本节涉及的函数 / 类</div>
+  <div class="ci-item"><span class="ci-func">apply_domain_randomization()</span></div>
+  <div class="ci-item"><span class="ci-func">env.reset()</span></div>
+</div>
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 实现逻辑</div>
+  <ol>
+    <li>6.5 域随机化</li>
+    <li>6.6 Benchmark 任务定义</li>
+    <li>6.7 本章小结</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    <a class="prev" href="../第06章-AI训练管线的实现/06-02-模仿学习——Behavior Cloning.html">&larr; 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第07章-Sim2Real部署实践/07-01-真机硬件规格.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

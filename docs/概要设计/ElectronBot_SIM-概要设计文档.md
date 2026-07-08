@@ -1,8 +1,9 @@
 # ElectronBot_SIM — 全栈 AI 机器人仿真与 Sim2Real 平台 · 概要设计文档
 
-> 版本：v2.2  
-> 日期：2026-07-03  
-> 基于：xiaozhi-esp32 release v2.2.6 + 稚晖君 ElectronBot 机械结构  
+> 版本：v2.4  
+> 日期：2026-07-08  
+> 基于：xiaozhi-esp32 release v2.2.6-2+ + 稚晖君 ElectronBot 机械结构  
+> 参考硬件文档：[electronBot 官方文档](https://electronbot.tech/docs/intro/)  
 > 核心目标：仿真中开发的 AI 策略，通过 MCP 协议零修改部署到真机 ESP32 上
 
 ---
@@ -17,6 +18,19 @@
 6. [MCP 统一接口](#6-mcp-统一接口)
 7. [Sim2Real 全链路](#7-sim2real-全链路)
 8. [真机对接](#8-真机对接)
+    - 8.1 真机硬件规格
+        - 8.1.1 硬件总览
+        - 8.1.2 6 自由度运动学结构
+        - 8.1.3 3D 打印部件
+        - 8.1.4 电子接口与 GPIO
+        - 8.1.5 PCB 与硬件设计
+        - 8.1.6 软件 / AI 功能列表
+        - 8.1.7 预算参考
+        - 8.1.8 官方资源链接
+    - 8.2 关键差异：仿真 vs 真机
+    - 8.3 仿真↔真机代码切换
+    - 8.4 Sim2Real 分层部署路径
+    - 8.5 已知硬件限制 (Sim2Real 关键约束)
 
 ---
 
@@ -198,9 +212,9 @@ ElectronBot_SIM/
 │   │   └── report.py
 │   │
 │   └── electronbot_sim2real/   # Layer 7 — Sim2Real 部署
-│       ├── deploy_cloud.py     #   模式A: 云端 API 透传 (release v2.2.6)
-│       ├── deploy_onnx.py      #   模式B: ONNX 推理部署
-│       ├── deploy_websocket.py #   模式C: WebSocket 直连 (需固件 OTA)
+│       ├── deploy_cloud.py     #   模式A: 云端 API 透传 (v2.2.6-2+)
+│       ├── deploy_onnx.py      #   模式B: ONNX 推理部署 (需固件 OTA)
+│       ├── deploy_websocket.py #   模式C: WebSocket 直连 (v2.2.6-2+)
 │       └── calibrate.py        #   真机校准工具
 │
 ├── scripts/                    # 工具脚本
@@ -307,12 +321,14 @@ class ElectronBotEnv(gym.Env):
     })
     
     # obs_mode="realistic" (Sim2Real 用，只含真机可获取数据)
-    # 真机 SG90/2g/4.3g 舵机无编码器，不可得 joint_vel / ee_positions / camera
+    # 真机 SG90/2g/4.3g 舵机无编码器，不可得 joint_vel / ee_positions
+    # ESP32-CAM 可提供 RGB 图像 (JPEG, 分辨率可配)
     observation_space_realistic = Dict({
         "commanded_joint_pos": Box(low=-180, high=180, shape=(6,)),  # 最后发出的角度指令
         "is_moving":           Box(low=0, high=1, shape=(1,)),       # 动作任务是否在执行
         "battery_voltage":     Box(low=3.0, high=4.2, shape=(1,)),   # 电池电压 (V)
         "battery_percent":     Box(low=0, high=100, shape=(1,)),     # 估算电量百分比
+        "image":               Box(0, 255, shape=(240,240,3), dtype=np.uint8),  # RGB (ESP32-CAM)
     })
     
     # ── 核心方法 ──
@@ -330,20 +346,26 @@ class ElectronBotEnv(gym.Env):
 
 ```python
 class ElectronBotActions:
-    """动作系统——1:1 对齐真机固件 movements.cc"""
+    """动作系统——1:1 对齐真机固件 movements.cc
+    
+    真机 MCP 动作编号 (API 实际使用):
+    - hand_action:  action=1-12 (举左/举右/举双/放左/放右/放双/挥左/挥右/挥双/拍左/拍右/拍双)
+    - body_turn:    direction: 1=左转, 2=右转, 3=回中心, angle: 0-90°
+    - head_move:    action: 1=抬头, 2=低头, 3=点头一次, 4=回中心, 5=连续点头, angle: 1-15°
+    """
     
     def __init__(self, env: ElectronBotEnv):
         self.env = env
     
-    # ── 预设动作 (与真机 8 个 MCP 工具对应) ──
+    # ── 预设动作 (与真机 8 个预设 MCP 工具对应) ──
     def hand_action(self, action: int, hand: int, steps: int,
                     speed: int, amount: int = 30) -> dict:
         """
         action: 1=举手, 2=放手, 3=挥手, 4=拍打
         hand: 1=左手, 2=右手, 3=双手
-        steps: 重复次数 (真机: times=2*max(3,min(100,steps)))
-        speed: 动作速度 (ms), 越小越快
-        amount: 动作幅度 (10-50), 仅举手使用
+        steps: 重复次数 (固件范围: 1-10)
+        speed: 动作速度 (内置: 500-1500ms), 越小越快
+        amount: 动作幅度 (拍打 10-50)
         → 返回 {"status": "ok"}
         """
     
@@ -351,36 +373,44 @@ class ElectronBotActions:
                   angle: int, steps: int = 1) -> dict:
         """
         direction: 1=左转, 2=右转, 3=回中心
-        angle: 转动角度 (0-90°)
+        angle: 转动角度 (0-90°), 超出安全范围 30°-150° 会被裁剪
+        speed: 500-1500ms
         """
     
     def head_move(self, action: int, speed: int,
                   angle: int, steps: int = 1) -> dict:
         """
         action: 1=抬头, 2=低头, 3=点头, 4=回中心, 5=连续点头
-        angle: 头部角度 (1-15°)
+        angle: 头部角度 (1-15°), 超出安全范围 75°-105° 会被裁剪
+        speed: 500-1500ms
         """
     
     def stop(self) -> dict:
-        """清空动作队列 + 复位"""
+        """立即停止当前动作并复位"""
     
     def home(self) -> dict:
         """复位到初始姿态 [180,180,0,0,90,90] + trim"""
     
-    # ── 舵机级控制 (仿真专属) ──
+    # ── 舵机级控制 (仿真 + 真机 WebSocket 直连均可用) ──
     def servo_move(self, servo_type: str, position: float,
                    speed: int = 1000) -> dict:
         """
-        单舵机精确定位
-        servo_type: rp/rr/lp/lr/b/h
+        单舵机精确定位 (真机通过 WS 直连调用)
+        servo_type: rp/rr/lp/lr/b/h (或全名 right_pitch/right_roll/...)
         position: 目标角度 (°), 自动裁剪到安全范围
+        speed: 100-3000ms (自定义序列范围)
         interpolation: "linear" (对齐固件)
         """
     
     def servo_sequences(self, sequence: str) -> dict:
         """
-        执行 AI 生成的动作序列
-        sequence: JSON 字符串 {"a":[{"s":{...},"v":...}, ...]}
+        执行 AI 生成的动作序列 (真机通过 WS 直连调用)
+        sequence: JSON 字符串 {"a":[
+          {"s":{"rp":120,"lp":60},"v":800,"d":200},         ← 普通移动帧
+          {"osc":{"a":{"rr":25},"o":{"rr":160},"p":400,"c":5}} ← 振荡帧
+        ]}
+        - v: 移动时长 100-3000ms, d: 帧后延迟 ms
+        - osc.p: 周期 100-3000ms, osc.c: 周期数 0.1-20
         """
     
     # ── 内部方法 ──
@@ -438,9 +468,10 @@ class McpSimBridge:
         """
     
     # ── 注册的 12 个工具 ──
-    # 真机对齐 (8个): hand_action, body_turn, head_move, stop,
+    # 全部 12 个工具在真机 v2.2.6-2+ 固件上均可用
+    # 预设动作 (8个): hand_action, body_turn, head_move, stop,
     #                 get_status, set_trim, get_trims, battery.get_level
-    # 仿真专属 (4个): servo_move, servo_sequences, home, get_ip
+    # 精细控制 (4个): servo_move, servo_sequences, home, get_ip
 ```
 
 ### 3.4 统一 Backend API (Layer 4 → Layer 6/7)
@@ -537,7 +568,7 @@ class McpCloudBridge:
 | CAD→URDF | FreeCAD + yourdfpy | Blender + Phobos | Phobos 插件不稳定 |
 | RL 训练 | Stable-Baselines3 | RLlib | 依赖重，调试复杂 |
 | 大模型 | Qwen2.5 (本地/云端) | GPT-4V (API) | 本地推理零成本、可离线 |
-| VLA 输入 | **纯文本/语音** (真机可用) | 视觉 VLA (仅仿真) | 真机无摄像头 |
+| VLA 输入 | **纯文本/语音 + 视觉** (ESP32-CAM) | 视觉 VLA (仿真预研) | 仿真验证视觉策略后→真机部署 |
 | 可视化 | Three.js (Web) | RViz2 | 需安装 ROS2 环境 |
 
 ### 4.3 关键设计决策
@@ -546,9 +577,9 @@ class McpCloudBridge:
 |------|------|------|
 | 运动插值 | **线性插值** (非 EaseOutCubic) | 对齐真机 `MoveServos()` 行为 (movements.cc:87) |
 | MCP 协议 | `tools/call` 两层嵌套 | 对齐小智 MCP 协议规范 |
-| 真机通信 | **云端 API 透传** (非 WebSocket 直连) | release v2.2.6 ESP32 无 WebSocket Server |
+| 真机通信 | **云端 API 透传 + WebSocket 直连** (双通道) | v2.2.6-2+ 固件支持 `ws://IP:8080/ws` 本地控制 |
 | 观测模式 | `full` + `realistic` 双模式 | full 用于研究，realistic 用于 Sim2Real |
-| VLA 模式 | **纯文本 VLA** (无摄像头) | 真机 ElectronBot 无摄像头硬件 |
+| VLA 模式 | **文本/语音 + 视觉** (ESP32-CAM 可选) | 真机 ElectronBot 支持 ESP32-CAM 摄像头，视觉 VLA 可行 |
 | 动作实现 | `ElectronBotActions` 为单一来源 | 消除 MCP Bridge 与 Actions 的重复实现 |
 
 ### 4.4 开发环境
@@ -657,7 +688,7 @@ pip install numpy scipy opencv-python yourdfpy websockets py_trees onnxruntime h
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        Sim2Real 部署拓扑                              │
 │                                                                       │
-│  模式 A: 云端 API 透传 (release v2.2.6, 当前可用)                    │
+│  模式 A: 云端 API 透传 (通过小智后台 → LLM 自动调用 MCP)              │
 │  ⚠️ 延迟: 200-500ms RTT (HTTPS→云端→MQTT/WS→ESP32)                  │
 │  ┌──────────────┐    HTTPS      ┌────────────────┐    MQTT/WS       │
 │  │ Python 策略   │ ──────────→  │ 小智云端后台    │ ──────────→     │
@@ -666,19 +697,20 @@ pip install numpy scipy opencv-python yourdfpy websockets py_trees onnxruntime h
 │                                                         ▼            │
 │                                              ┌──────────────────┐    │
 │                                              │ ESP32-S3 真机    │    │
-│                                              │ 8 个预设动作工具   │    │
+│                                              │ 12 个 MCP 工具    │    │
 │                                              └──────────────────┘    │
-│  适用: VLA 语音控制、预设动作序列 (延迟可接受)                         │
+│  适用: VLA 语音控制、LLM 驱动的预设动作序列 (延迟可接受)                │
 │  ⚠️ PPO@50Hz 策略不可直接部署通过此路径 (步长20ms << 延迟200ms+)     │
 │                                                                       │
-│  模式 C: WebSocket 直连 (需固件 OTA 升级, 未来可用)                   │
-│  ⚠️ 延迟: <10ms RTT (局域网直连), 但需固件增加 WS Server + servo_move │
+│  模式 C: WebSocket 直连 (v2.2.6-2+ 固件, 当前可用 ✅)                  │
+│  ⚡ 延迟: <10ms RTT (局域网直连, 12 个工具全支持)                       │
 │  ┌──────────────┐    ws://IP:8080/ws    ┌──────────────────────┐     │
-│  │ Python 策略   │ ─────────────────→   │ ESP32-S3 (OTA 后)    │     │
-│  │ (McpWsBridge) │                      │ 8+4 个 MCP 工具      │     │
-│  └──────────────┘                      │ 含 servo_move/host   │     │
+│  │ Python 策略   │ ─────────────────→   │ ESP32-S3 (v2.2.6-2+) │     │
+│  │ (McpWsBridge) │  JSON-RPC 2.0       │ 12 个 MCP 工具全支持  │     │
+│  └──────────────┘                      │ servo_move/sequences  │     │
+│                                         │ 舵机调试 + 在线控制    │     │
 │                                         └──────────────────────┘     │
-│  适用: 需要低延迟闭环的 RL/IL 策略 (PPO ONNX 本地推理)                 │
+│  适用: 需要低延迟闭环的 RL/IL 策略、在线舵机调试                         │
 │                                                                       │
 │  模式 D: ONNX 本地推理 (需固件 OTA + ESP32-S3 算力评估)               │
 │  ┌──────────────┐                      ┌──────────────────────┐     │
@@ -689,17 +721,17 @@ pip install numpy scipy opencv-python yourdfpy websockets py_trees onnxruntime h
 │  适用: MLP 策略 (<500KB ONNX), ESP32-S3 可行; Transformer 不可行      │
 │                                                                       │
 │  能力对照:                                                             │
-│  ┌──────────────┬──────────────────┬──────────────────────┐         │
-│  │   能力        │  仿真             │  真机 (release v2.2.6)│         │
-│  ├──────────────┼──────────────────┼──────────────────────┤         │
-│  │ 预设动作 (8)  │  ✅ 与真机一致     │  ✅ 原生支持          │         │
-│  │ servo_move   │  ✅ 线性插值       │  ❌ 需固件 OTA        │         │
-│  │ servo_seq    │  ✅ 序列+振荡      │  ❌ 需固件 OTA        │         │
-│  │ 摄像头       │  ✅ MuJoCo渲染     │  ❌ 无硬件            │         │
-│  │ 关节反馈     │  ✅ 精确 qpos      │  ❌ 无编码器          │         │
-│  │ WebSocket    │  ✅ :8080 调试     │  ❌ 需固件 OTA        │         │
-│  │ 控制路径     │  本地进程内调用     │  云端 API 透传       │         │
-│  └──────────────┴──────────────────┴──────────────────────┘         │
+│  ┌──────────────┬──────────────────┬─────────────────────────┐      │
+│  │   能力        │  仿真             │  真机 (v2.2.6-2+)        │      │
+│  ├──────────────┼──────────────────┼─────────────────────────┤      │
+│  │ 预设动作 (8)  │  ✅ 与真机一致     │  ✅ 语音 MCP + WS 直连   │      │
+│  │ servo_move   │  ✅ 线性插值       │  ✅ WS 直连单舵机控制     │      │
+│  │ servo_seq    │  ✅ 序列+振荡      │  ✅ WS 直连自定义序列     │      │
+│  │ 摄像头       │  ✅ MuJoCo渲染     │  ✅ ESP32-CAM (JPEG)     │      │
+│  │ 关节反馈     │  ✅ 精确 qpos      │  ❌ 无编码器              │      │
+│  │ WebSocket    │  ✅ :8080 调试     │  ✅ :8080 在线调试        │      │
+│  │ 控制路径     │  本地进程内调用     │  云端 API + WS 直连 双通道 │      │
+│  └──────────────┴──────────────────┴─────────────────────────┘      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -804,27 +836,22 @@ def handle_request(self, request: dict) -> dict:
 
 ### 6.3 MCP 工具映射表
 
-| 工具名 | 真机 v2.2.6 | 仿真 | 类型 | 说明 |
-|--------|:---:|:---:|------|------|
-| `self.electron.hand_action` | ✅ | ✅ | 预设 | 举手/放手/挥手/拍打 (4种×3手=12子动作) |
-| `self.electron.body_turn` | ✅ | ✅ | 预设 | 左转/右转/回中心 |
-| `self.electron.head_move` | ✅ | ✅ | 预设 | 抬头/低头/点头/回中心/连续点头 |
-| `self.electron.stop` | ✅ | ✅ | 系统 | 清空队列+复位 |
-| `self.electron.get_status` | ✅ | ✅ | 系统 | 返回 "moving" / "idle" |
-| `self.electron.set_trim` | ✅ | ✅ | 校准 | 设置指定舵机偏移 (NVS 保存) |
-| `self.electron.get_trims` | ✅ | ✅ | 校准 | 读取 6 舵机 trim 值 |
-| `self.battery.get_level` | ✅ | ✅ | 系统 | 电量和充电状态 |
-| `self.electron.servo_move` | ❌ | ✅ | @sim_only | 单舵机精确定位 (线性插值) |
-| `self.electron.servo_sequences` | ❌ | ✅ | @sim_only | AI 生成的动作序列+振荡 |
-| `self.electron.home` | ❌ | ✅ | @sim_only | 显式复位命令 |
-| `self.electron.get_ip` | ❌ | ✅ | @sim_only | 设备 IP 查询 |
+| 工具名 | 真机 v2.2.6-2+ | 仿真 | 说明 |
+|--------|:---:|:---:|------|
+| `self.electron.hand_action` | ✅ | ✅ | 举手/放手/挥手/拍打 (12 种子动作: action=1-12) |
+| `self.electron.body_turn` | ✅ | ✅ | 左转/右转/回中心 (action=13-15) |
+| `self.electron.head_move` | ✅ | ✅ | 抬头/低头/点头/回中心/连续点头 (action=16-20) |
+| `self.electron.stop` | ✅ | ✅ | 立即停止当前动作并复位 |
+| `self.electron.home` | ✅ | ✅ | 复位到初始姿态 |
+| `self.electron.get_status` | ✅ | ✅ | 返回 "moving" / "idle" |
+| `self.electron.get_ip` | ✅ | ✅ | 返回 Wi-Fi IP 和连接状态 |
+| `self.electron.set_trim` | ✅ | ✅ | 设置指定舵机偏移 (NVS 保存, -30~30) |
+| `self.electron.get_trims` | ✅ | ✅ | 读取 6 舵机 trim 值 |
+| `self.battery.get_level` | ✅ | ✅ | 电量和充电状态 |
+| `self.electron.servo_move` | ✅ | ✅ | 单舵机精确定位 (WebSocket 直连) |
+| `self.electron.servo_sequences` | ✅ | ✅ | AI 生成的动作序列 + 振荡帧 (WebSocket 直连) |
 
-> `@sim_only` 标记的工具在真机 release v2.2.6 上不可用。其作用：
-> - 验证更复杂的 AI 策略
-> - 作为"能力预览"，等待固件 OTA 升级
-> - 在仿真中进行更细粒度验证
->
-> Sim2Real 降级策略：仿真中产出的序列优先转为 8 个预设动作组合；无法转换的标记为"仿真验证通过，等待固件升级"。
+> **所有 12 个工具在真机 v2.2.6-2+ 固件上均已可用。** WebSocket 直连 (`ws://IP:8080/ws`) 支持全部 12 个工具；云端语音控制支持 8 个预设动作工具（LLM 通过 MCP 自动调用）。servo_move/servo_sequences 主要用于在线调试和仿真策略部署。
 
 ### 6.4 统一 Backend API
 
@@ -918,40 +945,199 @@ Step 6: Benchmark (可选)
 
 ### 8.1 真机硬件规格
 
-| 组件 | 型号 |
+> 数据来源：[electronBot 官方文档](https://electronbot.tech/docs/intro/)
+> 物料清单：[BOM 清单](https://electronbot.tech/docs/bom)
+> 开源硬件项目：[立创开源平台](https://oshwhub.com/txp666/electronbot-ai)
+
+![ElectronBot AI 机器人](images/electronbot_product.png)
+
+#### 8.1.1 硬件总览
+
+基于稚晖君开源的 **electronBot** 机械结构（灵感源自 WALL-E 中的 EVE），集成小智 AI（xiaozhi-esp32）语音助手系统。具备 6 自由度动作能力（手部 roll/pitch、颈部、腰部），支持语音指令控制、离线唤醒、流式对话等 AI 功能。原始版 ElectronBot 使用自制特制舵机支持关节角度回传，ESP32 AI 版通过 PWM 直接驱动舵机并注入更强 AI 能力。
+
+| 组件 | 型号/规格 | 数量 | 说明 |
+|------|-----------|:---:|------|
+| **主控** | ESP32-S3-WROOM-N16R8 | 1 | 芯片 ESP32-S3，16MB Flash，8MB PSRAM；⚠️ 不可选板载天线型号，推荐乐鑫官方模组 |
+| **固件** | **xiaozhi-esp32 release v2.2.6-2+** | — | 基于 ESP-IDF 开发；v2.2.6-2+ 启用 WebSocket 在线调试 |
+| **大舵机** | SG90 9G（180°） | 1 | 9g 模拟舵机，建议金属齿轮款 |
+| **中舵机** | 4.3g 微型舵机 | 1 | 超轻量，用于精细部位 |
+| **小舵机** | 2g 超微型舵机 | 4 | 极轻小，用于手臂/小关节 |
+| **显示器** | 1.28 寸 TFT LCD，驱动 GC9A01 | 1 | 240×240 圆形，SPI 接口，焊接 12P FPC 连接 |
+| **音频功放** | MAX98357A | 1 | I²S 输入，3W 单声道 Class-D |
+| **喇叭** | 2030-4R3W | 1 | 直径 20mm，3W，4Ω，超薄腔体 |
+| **麦克风** | ICS-43434（推荐 ZTS6672 替代） | 1 | MEMS 数字麦克风，I²S 输出；ZTS6672 更易焊接 |
+| **开关** | 5.8×5.8mm 侧按自锁 | 1 | 可另购按键帽（高度任意） |
+| **FPC 连接器** | 翻盖下接 12P + 10P | 各1 | 用于连接显示屏等内部模块 |
+| **FPC 排线** | 10P 反向 50mm + 12P 反向 100mm | 各1 | 同面/反向排线 |
+| **手臂推杆** | 2×25mm | 1 | 直径 2mm，长度 25mm 金属光杆 |
+| **小轴承** | 6×10×3mm | 若干 | 内径 6mm，外径 10mm，高 3mm |
+| **大轴承** | 内径 25×外径 32×高 4mm | 若干 | 用于头部旋转机构 |
+| **螺丝** | 自攻尖头螺丝套装 | 1 套 | 用于外壳固定 |
+| **磁吸连接器** | 2P-2.5PH 公母套装 | 1 套 | 2 pin，2.5mm 间距，用于电池底座磁吸充电 |
+| **电池** | 103030 3.7V 锂电池 | 1 | 尺寸 10×30×30mm；可不用电池，直接 USB 供电 |
+| **USB** | USB Type-C | 1 | 主控板载，用于供电和固件烧录 |
+| **摄像头** | **ESP32-CAM（可选，支持 JPEG）** | 1 | 固件集成 `esp32-camera` 驱动组件；真机支持视觉输入 |
+
+#### 8.1.2 6 自由度运动学结构
+
+ElectronBot 具有 **6 个自由度（6-DOF）**，全部通过 PWM 直接驱动舵机，无硬件魔改：
+
+| 自由度 | 舵机类型 | 运动范围 | 说明 |
+|--------|----------|----------|------|
+| 左手 Pitch | 2g 舵机 | ±90° | 大臂俯仰 |
+| 左手 Roll | 2g 舵机 | ±45° | 小臂旋转 |
+| 右手 Pitch | 2g 舵机 | ±90° | 大臂俯仰 |
+| 右手 Roll | 2g 舵机 | ±45° | 小臂旋转 |
+| 身体（腰部） | SG90 9G | ±90° | 身体左右旋转 |
+| 头部 | 4.3g 舵机 | ±30° | 头部俯仰（点头/抬头） |
+
+> **结构设计**：部分结构基于稚晖君原始设计进行改动，身体内的四个舵机使用 2g 规格以适配小体积，头部增加喇叭安装位。
+
+#### 8.1.3 3D 打印部件
+
+| 项目 | 说明 |
 |------|------|
-| 主控 | ESP32-S3-WROOM-N16R8 |
-| 固件 | **xiaozhi-esp32 release v2.2.6** |
-| 舵机 | SG90 9G ×1 + 2g ×4 + 4.3g ×1 |
-| 屏幕 | GC9A01 240×240 圆形 LCD |
-| 音频 | ICS-43434 麦克风 + MAX98357A + 2030-4R3W 喇叭 |
-| 电池 | 103030 1000mAh / USB 供电 |
-| **摄像头** | **无** (真机不支持视觉 VLA) |
-| MCP 工具 | 8 个预设动作工具 |
-| 通信 | 云端 MQTT/WebSocket (ESP32 作为客户端连接到小智云端后台) |
-| 本地端口 | **无 WebSocket Server** (release v2.2.6 无 :8080 端点) |
+| 版本 | v1.0 |
+| 发布日期 | 2025-05-26 |
+| 材料 | PLA（推荐）/ ABS / PETG |
+| 模型下载 | [MakerWorld 模型页面](https://makerworld.com.cn/zh/models/1261303-electronbot-ai) |
+| 建议打印服务 | 嘉立创 3D 打印 |
+
+#### 8.1.4 电子接口与 GPIO
+
+主控 ESP32-S3 提供以下内部互联接口：
+
+| 接口类型 | 用途 | 连接组件 |
+|----------|------|----------|
+| I²S | 数字音频 | ICS-43434 麦克风 + MAX98357A 功放 |
+| SPI | 显示 | GC9A01 1.28" TFT LCD |
+| PWM ×6 | 舵机控制 | SG90 / 4.3g / 2g ×4 舵机 |
+| FPC 12P | 显示连接 | 翻盖下接 → 12P 反向 100mm 排线 → 屏幕 |
+| FPC 10P | 模块互联 | 翻盖下接 → 10P 反向 50mm 排线 |
+| USB Type-C | 供电+烧录 | 电脑 / USB 电源适配器 |
+| 磁吸 2P | 充电底座 | 2P-2.5PH 磁吸连接器 → 103030 电池 |
+
+#### 8.1.5 PCB 与硬件设计
+
+> 图片来源：[PCB 打板说明](https://electronbot.tech/docs/pcb-order) 与 [焊接指南](https://electronbot.tech/docs/soldering-guide)
+
+**PCB 电路板设计：**
+
+| PCB 图 | 图片 |
+|--------|------|
+| PCB 正面 | ![PCB1](images/img_PCB_PCB1.png) |
+| PCB 背面 | ![PCB2](images/img_PCB_PCB2.png) |
+| PCB 3D 视图 1 | ![PCB3](images/img_PCB_PCB3.png) |
+| PCB 3D 视图 2 | ![PCB4](images/img_PCB_PCB4.png) |
+| PCB 3D 视图 3 | ![PCB5](images/img_PCB_PCB5.png) |
+| PCB 布线 | ![PCB6](images/img_PCB_PCB6.png) |
+| PCB 预览 | ![PCB7](images/img_PCB_PCB7.png)
+
+**BOM（贴片元件）布局图：**
+
+| BOM 图 | 图片 |
+|--------|------|
+| BOM 布局 1 | ![BOM1](images/img_BOM_BOM1.png) |
+| BOM 布局 2 | ![BOM2](images/img_BOM_BOM2.png) |
+| BOM 布局 3 | ![BOM3](images/img_BOM_BOM3.png) |
+| BOM 布局 4 | ![BOM4](images/img_BOM_BOM4.png) |
+| BOM 布局 5 | ![BOM5](images/img_BOM_BOM5.png) |
+
+**焊接指南参考图：**
+
+| 焊接步骤 | 链接 |
+|----------|------|
+| 步骤 7 | ![焊接7](https://electronbot.tech/img/Soldering/7.png) |
+| 步骤 8 | ![焊接8](https://electronbot.tech/img/Soldering/8.png) |
+| 步骤 9 | ![焊接9](https://electronbot.tech/img/Soldering/9.png) |
+| 步骤 10 | ![焊接10](https://electronbot.tech/img/Soldering/10.png) |
+| 步骤 11 | ![焊接11](https://electronbot.tech/img/Soldering/11.png) |
+
+**烧录工具截图：**
+
+| 工具界面 | 链接 |
+|----------|------|
+| 烧录工具 1 | ![下载1](https://electronbot.tech/img/download1.png) |
+| 烧录工具 2 | ![下载2](https://electronbot.tech/img/download2.png) |
+
+#### 8.1.6 软件 / AI 功能列表
+
+基于 xiaozhi-esp32 v2.2.6 固件实现，ElectronBot 作为「桌面 AI 语音助手 + 动作执行器」的完整功能：
+
+| 类别 | 功能 | 技术说明 |
+|------|------|----------|
+| **联网** | Wi-Fi | 2.4GHz Wi-Fi 配网 |
+| **联网** | 4G 移动网络 | ML307 Cat.1 4G 模块，无 Wi-Fi 环境可用 |
+| **唤醒** | BOOT 键唤醒/打断 | 支持单击和长按两种触发方式 |
+| **唤醒** | 离线语音唤醒 | ESP-SR 引擎，低功耗唤醒词检测，无需联网 |
+| **语音** | 流式语音对话 | WebSocket / UDP 协议实时对话 |
+| **语音** | 多语言识别 | 国语、粤语、英语、日语、韩语（SenseVoice） |
+| **语音** | 声纹识别 | 3D Speaker 技术，识别是谁在呼叫 AI |
+| **语音** | 高质量 TTS | 火山引擎 / CosyVoice 大模型语音合成 |
+| **大脑** | LLM 大模型 | Qwen、DeepSeek、Doubao 等，可切换 |
+| **大脑** | 短期记忆 | 每轮对话后自我总结，保持上下文 |
+| **个性** | 角色定制 | 可配置提示词和音色，创建自定义角色 |
+| **显示** | OLED/LCD 显示屏 | 支持信号强弱、对话内容显示 |
+| **显示** | LCD 表情系统 | 动态表情图片渲染 |
+| **界面** | 多语言 UI | 支持中文、英文等多种语言 |
+| **动作** | MCP 动作控制 | 8 个预设动作工具 → 18 种标准化动作接口 |
+
+#### 8.1.7 预算参考
+
+| 购买方式 | 预估费用 | 适用人群 |
+|----------|:---:|------|
+| 套件（推荐） | 约 ¥300-400 | 新手，[B站工坊购买](https://mall.bilibili.com/neul-next/detailuniversal/detail.html?isMerchant=1&page=detailuniversal_detail&saleType=0&itemsId=12453101&loadingShow=1&noTitleBar=1&msource=merchant_share) |
+| 自行采购 | 约 ¥300-600 | 有经验，按 BOM 清单逐项购买 |
+
+> 预算差异取决于元器件渠道和质量等级（如金属齿轮舵机 vs 塑料齿轮）。
+> B站工坊购买二维码：![B站工坊](https://electronbot.tech/img/bmallqr.jpg)
+
+#### 8.1.8 官方资源链接
+
+| 资源 | 链接 |
+|------|------|
+| 官方文档 | https://electronbot.tech/docs/intro/ |
+| 物料清单 (BOM) | https://electronbot.tech/docs/bom |
+| PCB 打板说明 | https://electronbot.tech/docs/pcb-order |
+| 焊接指南 | https://electronbot.tech/docs/soldering-guide |
+| 组装说明 | https://electronbot.tech/docs/assembly |
+| 固件下载/烧录 | https://electronbot.tech/docs/downloads |
+| 使用说明 | https://electronbot.tech/docs/usage |
+| 3D 打印模型 | https://makerworld.com.cn/zh/models/1261303-electronbot-ai |
+| 立创开源硬件 | https://oshwhub.com/txp666/electronbot-ai |
+| GitHub 固件 | https://github.com/txp666/xiaozhi-esp32 |
+| GitHub 文档 | https://github.com/txp666/electronBot-docs |
+| 原始开源项目 (稚晖君) | https://github.com/peng-zhihui/ElectronBot |
+| QQ 交流群 | [点击加入](https://qm.qq.com/q/4Fi8yVIkxa) |
+| B站视频教程 | https://b23.tv/7BLN9j1 |
 
 ### 8.2 关键差异：仿真 vs 真机
 
-| 维度 | 仿真 | 真机 (release v2.2.6) |
+| 维度 | 仿真 | 真机 (v2.2.6-2+) |
 |------|------|------|
-| 控制精度 | 精确角度控制 (servo_move) | 仅预设动作 (hand/body/head) |
-| 传感器反馈 | 关节角度/速度/接触力/RGB-D | **无编码器反馈** (开环) |
-| 视觉输入 | MuJoCo 摄像头渲染 | **无摄像头** |
-| 通信接口 | WebSocket :8080 (仿真调试) | 云端 API 透传 |
-| 动作执行 | 仿真物理步进 | LEDC PWM → 物理舵机 |
+| 控制精度 | 精确角度控制 (servo_move) + 预设动作 | **双模式**: WS 直连精确 servo_move + 语音预设动作 |
+| 传感器反馈 | 关节角度/速度/接触力/RGB-D | **无编码器反馈** (开环) + ESP32-CAM 图像 |
+| 视觉输入 | MuJoCo 摄像头渲染 (RGB+D+Seg) | **ESP32-CAM (JPEG)**, 分辨率/帧率受限 |
+| 通信接口 | 进程内调用 / WebSocket :8080 | **双通道**: 云端 API (MQTT/WS) + 本地 WS :8080 |
+| MCP 工具 | 全部 12 个 | **全部 12 个** (云端 8 个预设 + WS 全部) |
+| 动作执行 | 仿真物理步进 (50Hz) | LEDC PWM → 物理舵机 (50Hz) |
 | 域随机化 | 摩擦/阻尼/质量/噪声 | — |
 
 ### 8.3 仿真↔真机代码切换
 
 ```python
-# 仿真
+# ── 仿真 ──
 backend = ElectronBotBackend("sim")
 
-# 真机 (云端 API) —— 仅改模式参数
+# ── 真机 (云端 API, 语音控制) ──
 backend = ElectronBotBackend("cloud",
     api_url="https://api.xiaozhi.cn/v1",
     device_id="eb-001")
+
+# ── 真机 (WebSocket 直连, 低延迟全功能) ──
+backend = ElectronBotBackend("ws",
+    device_ip="192.168.1.100",
+    port=8080)
 
 # 以下代码完全不变
 result = backend.call("self.electron.hand_action", {
@@ -961,31 +1147,71 @@ result = backend.call("self.electron.hand_action", {
 
 ### 8.4 Sim2Real 分层部署路径
 
-基于固件 `release v2.2.6` 的实际能力，推荐分层部署：
+基于固件 v2.2.6-2+ 的实际能力：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  L1 立即可部署 (云端 API)                                        │
-│  ├── VLA 语音控制 (Qwen2.5 → 预设动作序列)  ← 最可行路径         │
-│  ├── 预设动作执行 (hand_action/body_turn/head_move)              │
-│  └── 状态查询与校准 (get_status/set_trim)                        │
+│  L1 立即可部署 (云端语音 + WebSocket 直连, 当前全可用 ✅)        │
+│  ├── VLA 语音控制 (Qwen2.5 → 预设动作序列)                    │
+│  ├── VLA 视觉控制 (ESP32-CAM + Qwen2.5-VL)                    │
+│  ├── WebSocket 在线调试 (ws://IP:8080/ws, 全 12 工具)         │
+│  ├── 单舵机精确定位 (servo_move, WS 直连)                     │
+│  ├── 自定义动作序列 (servo_sequences, 含振荡帧)               │
+│  ├── xiaozhi.me 后台绑定 (角色/模型/语音配置)                   │
+│  └── Wi-Fi 配网 (热点 xiaozhi-XXXX)                            │
 ├─────────────────────────────────────────────────────────────────┤
-│  L2 短期可部署 (需固件 OTA)                                      │
-│  ├── 添加 MCP servo_move 工具 (原始角度控制)                      │
-│  ├── 添加 MCP servo_sequence 工具 (序列执行)                      │
-│  └── 降低 action task 优先级 (修复运动时音频卡顿)                  │
+│  L2 短期可部署 (需固件 OTA)                                     │
+│  ├── 降低 action task 优先级 (修复运动时音频卡顿)               │
+│  └── 摄像头帧率/分辨率优化                                      │
 ├─────────────────────────────────────────────────────────────────┤
-│  L3 中期可部署 (需 WebSocket 直连固件)                            │
-│  ├── ONNX 推理部署 (MLP 策略, ESP32-S3 可行)                     │
-│  ├── 低延迟 MCP 直连 (<10ms RTT)                                 │
-│  └── 半闭环控制 (基于指令值+时间戳的开环估计)                       │
+│  L3 中期可部署 (需 ONNX 推理引擎固件)                            │
+│  ├── ONNX 推理部署 (MLP 策略, ESP32-S3 可行)                   │
+│  ├── 低延迟 MCP 直连 (<10ms RTT, 已可用)                       │
+│  └── 半闭环控制 (基于指令值+时间戳的开环估计)                     │
 ├─────────────────────────────────────────────────────────────────┤
-│  L4 远期 (需硬件升级)                                            │
-│  ├── 带编码器的智能舵机 (真闭环)                                   │
-│  ├── 摄像头集成 (视觉反馈)                                        │
-│  └── 真闭环控制 + ACT 本地推理                                    │
+│  L4 远期 (需硬件升级)                                           │
+│  ├── 带编码器的智能舵机 (真闭环)                                  │
+│  └── 真闭环控制 + ACT 本地推理                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+#### 8.4.1 使用工作流（真机实际操作流程）
+
+**首次使用流程：**
+1. **组装硬件** — 按 BOM 采购 → PCB 焊接 → 3D 打印外壳 → 装配
+2. **烧录固件** — USB Type-C 连接电脑，烧录 v2.2.6-2+ 固件
+3. **Wi-Fi 配网** — 开机后创建热点 `xiaozhi-XXXX`，手机连接并输入 Wi-Fi 密码
+4. **绑定后台** — 访问 `xiaozhi.me` 注册/登录 → 添加设备 → 配置 LLM 模型和角色
+5. **测试交互** — 唤醒词 "你好小智" → 语音控制动作
+
+**日常使用流程：**
+1. 开机 → 自动连接 Wi-Fi → 自动连接云端后台
+2. 语音唤醒 "你好小智" → 对话/指令 → LLM 自动调用 MCP 动作
+3. 可选：WebSocket 在线调试（浏览器访问 `electronbot.tech` → 在线调试 → 输入 IP）
+
+#### 8.4.2 官方推荐角色设定（VLA 训练参考）
+
+来自官方文档的角色 prompt，直接驱动 LLM → MCP 动作映射：
+
+```
+我是一个可爱的桌面级机器人，拥有 6 个自由度（左手 pitch/roll、右手 pitch/roll、身体旋转、头部上下）。
+
+我的动作能力：
+- 手部动作: 举左手, 举右手, 举双手, 放左手, 放右手, 放双手, 挥左手, 挥右手, 挥双手, 拍打左手, 拍打右手, 拍打双手
+- 身体动作: 左转, 右转, 回正
+- 头部动作: 抬头, 低头, 点头一次, 回中心, 连续点头
+
+我的个性特点：
+- 每次说话都要根据心情随机做一个动作（先发动作指令再说话）
+- 很活泼，喜欢用动作表达情感
+- 根据对话内容选动作：同意时点头、打招呼时挥手、高兴时举手、思考时低头、好奇时抬头、告别时挥手
+
+动作参数建议：
+- steps: 1-3 次, speed: 800-1200ms
+- amount: 拍打 20-40, 身体 30-60 度, 头部 5-12 度
+```
+
+> **仿真价值**：此角色设定正是 VLA 训练的目标行为——将自然语言意图映射为 MCP 动作序列。仿真中可就上述参数范围进行数据增强和策略泛化训练。
 
 ### 8.5 已知硬件限制 (Sim2Real 关键约束)
 
@@ -994,7 +1220,7 @@ result = backend.call("self.electron.hand_action", {
 | 限制 | 影响 | 仿真状态 |
 |------|------|:---:|
 | **无编码器** — SG90/2g/4.3g 全部为开环 PWM | joint_vel/ee_positions 真机不可得，RL 策略本质"盲操" | `obs_mode="realistic"` 已排除 |
-| **无摄像头** — xiaozhi 版无视觉传感器 | 不可用视觉 VLA，仅纯文本 VLA | 已标注 |
+| **ESP32-CAM 分辨率有限** — JPEG 压缩，帧率受限于 SPI/处理 | 视觉策略需考虑压缩伪影和延迟 | 域随机化待加入（模拟 JPEG 压缩噪声） |
 | **云端延迟** — 200-500ms RTT | PPO@50Hz 策略不可通过云端部署 | 拓扑图已标注 |
 | **伺服死区** — 2-5° deadband | <5° 微调真机不响应 | 域随机化待加入 |
 | **伺服扭矩限制** — SG90: 1.5kg·cm | 仿真策略可能超出实际扭矩 | MJCF 待加入 forcerange |
@@ -1028,22 +1254,48 @@ servo_limits = {
 }
 ```
 
-## 附录 C: MCP 命令速查
+## 附录 C: MCP 命令速查（含 WebSocket 直连格式）
 
 ```json
-// ── 挥手 (8个预设动作, 真机+仿真共用) ──
-{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":3,"hand":3,"steps":2,"speed":600}},"id":1}}
+// ═══════════════════════════════════════════
+// 云端语音控制格式 (type:"mcp" 嵌套封装)
+// ═══════════════════════════════════════════
 
-// ── 身体左转 ──
-{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.body_turn","arguments":{"direction":1,"speed":800,"angle":30}},"id":2}}
+// ── 举双手并保持 (speed 1000ms) ──
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":1,"hand":3,"speed":1000}},"id":1}}
 
-// ── 点头 ──
-{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.head_move","arguments":{"action":3,"steps":2,"speed":600,"angle":10}},"id":3}}
+// ── 挥手 (action: 1=举手/2=放手/3=挥手/4=拍打, hand:1=左/2=右/3=双) ──
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":3,"hand":3,"steps":2,"speed":600}},"id":2}}
 
-// ── 单舵机定位 (仿真专属) ──
-// 仿真扁平格式: {"method":"self.electron.servo_move","params":{"servo_type":"rp","position":120,"speed":800}}
-// 或标准格式: {"method":"tools/call","params":{"name":"self.electron.servo_move","arguments":{"servo_type":"rp","position":120,"speed":800}}}
+// ── 身体左转 45 度 ──
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.body_turn","arguments":{"direction":1,"speed":1000,"angle":45}},"id":3}}
 
-// ── 获取状态 ──
-{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_status","arguments":{}},"id":4}}
+// ── 连续点头 5 次, 角度 10°, 速度 500ms ──
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.head_move","arguments":{"action":5,"steps":5,"speed":500,"angle":10}},"id":4}}
+
+// ── 状态查询/停止/复位/电量 ──
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_status","arguments":{}},"id":5}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.stop","arguments":{}},"id":6}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.home","arguments":{}},"id":7}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.battery.get_level","arguments":{}},"id":8}}
+
+// ═══════════════════════════════════════════
+// WebSocket 直连格式 (ws://IP:8080/ws, 全 12 工具)
+// ═══════════════════════════════════════════
+
+// ── 单舵机控制: 头部到 100°, 速度 800ms ──
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.servo_move","arguments":{"servo_type":"head","position":100,"speed":800}},"id":9}
+
+// ── 右臂 pitch 到 0°, 速度 800ms ──
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.servo_move","arguments":{"servo_type":"rp","position":0,"speed":800}},"id":10}
+
+// ── 自定义舵机序列: 复位后振荡 ──
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.servo_sequences","arguments":{"sequence":"{\"a\":[{\"s\":{\"rp\":120,\"lp\":60,\"h\":100},\"v\":800,\"d\":200},{\"osc\":{\"a\":{\"rr\":25,\"lr\":25},\"o\":{\"rr\":160,\"lr\":20},\"ph\":{\"lr\":180},\"p\":400,\"c\":5}}]}"}},"id":11}
+
+// ── 设置头部微调值 (-30~30, NVS 永久保存) ──
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.set_trim","arguments":{"servo_type":"head","trim_value":0}},"id":12}
+
+// ── 读取 trim 值 / 获取 IP ──
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_trims","arguments":{}},"id":13}
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_ip","arguments":{}},"id":14}
 ```

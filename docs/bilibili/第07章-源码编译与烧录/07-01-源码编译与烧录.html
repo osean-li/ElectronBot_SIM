@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.2 源码编译与自定义 · ElectronBot-SIM 教学书</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.78;max-width:860px;margin:32px auto;padding:0 20px;}</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 06 章 · 固件编译与烧录 — 子章节 2/2</div>
+    <h1>6.2 源码编译与自定义</h1>
+    <div class="chap-meta">
+      <span>阅读约 10 分钟</span>
+      <span>ESP-IDF · 编译 · OTA · 自定义</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span>
+      <span class="kw">ESP-IDF v5.1</span><span class="kw">idf.py</span><span class="kw">menuconfig</span><span class="kw">编译</span><span class="kw">xiaozhi-esp32</span>
+    </div>
+  </header>
+
+  <div class="section-background">
+    <div class="bg-title">上下文回顾</div>
+    <div class="bg-body">
+      上一节你通过预编译固件快速烧录了 v2.2.6-2。本节介绍<b>如何从源码编译固件</b>，适用于需要修改 Wi-Fi 配置、调整舵机参数、或适配不同板型的场景。
+    </div>
+  </div>
+
+  <main class="content">
+    <h2>环境准备（Ubuntu 22.04）</h2>
+    <pre><code># 系统依赖
+sudo apt update
+sudo apt install -y \
+    git wget flex bison gperf \
+    python3 python3-pip python3-venv python3-dev \
+    cmake ninja-build ccache \
+    libffi-dev libssl-dev libusb-1.0-0-dev \
+    dfu-util
+
+# 串口权限
+sudo usermod -a -G dialout,plugdev $USER
+# 重新登录生效</code></pre>
+
+    <h2>安装 ESP-IDF v5.1</h2>
+    <pre><code># 克隆 ESP-IDF v5.1（xiaozhi-esp32 使用的版本）
+git clone -b v5.1 --recursive https://github.com/espressif/esp-idf.git ~/esp-idf-v5.1
+
+# 安装工具链
+cd ~/esp-idf-v5.1
+./install.sh esp32s3
+
+# 激活环境（每次编译前）
+source ~/esp-idf-v5.1/export.sh</code></pre>
+
+    <div class="knowledge-card">
+      <div class="kc-header">提示：永久激活</div>
+      <div class="kc-body">
+        将 <code>source ~/esp-idf-v5.1/export.sh</code> 添加到 <code>~/.bashrc</code> 末尾，每次打开终端自动激活。
+      </div>
+    </div>
+
+    <h2>编译固件</h2>
+    <pre><code># 进入源码目录
+cd xiaozhi-esp32-2.2.6
+
+# 设置目标芯片
+idf.py set-target esp32s3
+
+# 配置（可选：修改 Wi-Fi 默认 SSID、配网方式等）
+idf.py menuconfig
+# 常见配置项：
+#   - Wi-Fi 配置 → 默认 SSID/密码
+#   - 板型选择 → electronBot
+#   - MCP 协议 → 启用
+
+# 编译（首次编译较慢，约 5-10 分钟）
+idf.py build</code></pre>
+
+    <h2>合并固件分区</h2>
+    <p>编译完成后，需要将多个 bin 文件合并为单一固件：</p>
+    <pre><code>esptool.py --chip esp32s3 merge_bin -o merged-flash.bin \
+  --flash_mode dio --flash_size 16MB \
+  0x0 build/bootloader/bootloader.bin \
+  0x8000 build/partition_table/partition-table.bin \
+  0xd000 build/ota_data_initial.bin \
+  0x20000 build/xiaozhi.bin \
+  0x800000 build/generated_assets.bin</code></pre>
+
+    <h2>烧录合并固件</h2>
+    <pre><code>esptool.py --chip esp32s3 --port /dev/ttyUSB0 --baud 921600 \
+  write_flash 0x0 merged-flash.bin</code></pre>
+
+    <div class="knowledge-card concept">
+      <div class="kc-header">烧录后验证</div>
+      <div class="kc-body">
+        烧录完成后，用 <code>minicom -D /dev/ttyUSB0 -b 115200</code> 查看串口输出。<br>
+        确认看到 Wi-Fi 连接成功和 IP 地址获取日志，然后用 <code>websocat ws://IP:8080/ws</code> 验证 WebSocket 服务。
+      </div>
+    </div>
+
+    <h2>自定义配置示例</h2>
+
+    <h3>修改默认 Wi-Fi</h3>
+    <pre><code># 在 menuconfig 中修改：
+# Component config → Wi-Fi → Wi-Fi Provisioning
+# 或在代码中硬编码（不推荐生产环境）</code></pre>
+
+    <h3>调整 MCP 工具白名单</h3>
+    <p>如需在真机上启用更多仿真端已有但真机固件未开放的工具，可在固件源码的 <code>mcp_server.cc</code> 中注册。</p>
+
+    <h3>修改舵机默认角度</h3>
+    <p>在 <code>movements.cc</code> 中调整 home 姿态的各舵机目标角度。</p>
+
+    <h2>源码仓库</h2>
+    <ul>
+      <li>ESP32+AI 完整源码：<a href="https://github.com/txp666/xiaozhi-esp32">https://github.com/txp666/xiaozhi-esp32</a></li>
+      <li>固件官方下载页：<a href="https://electronbot.tech/docs/downloads">https://electronbot.tech/docs/downloads</a></li>
+    </ul>
+
+    <div class="code-index">
+      <div class="ci-title">本项目的固件相关文件</div>
+      <div class="ci-item"><span class="ci-file">docs/固件编译烧录指南.md</span> <span class="ci-desc">详细编译烧录指南</span></div>
+      <div class="ci-item"><span class="ci-file">xiaozhi-esp32-2.2.6/</span> <span class="ci-desc">固件源码目录</span></div>
+      <div class="ci-item"><span class="ci-file">tasks/04-Firmware-Burning/</span> <span class="ci-desc">本 Phase 设计说明书</span></div>
+    </div>
+
+    <div class="logic-summary">
+      <div class="ls-title">本节逻辑小结</div>
+      <ol>
+        <li>ESP-IDF v5.1 是编译 xiaozhi-esp32 v2.2.6 的必要工具链</li>
+        <li>idf.py set-target esp32s3 → menuconfig → build 三步完成编译</li>
+        <li>合并分区 + esptool 烧录即可部署自定义固件</li>
+        <li>源码编译主要用于自定义 Wi-Fi 配置、MCP 工具扩展等场景</li>
+      </ol>
+    </div>
+  </main>
+
+  <nav class="chap-nav">
+    <a class="prev" href="06-01-固件版本选择与烧录.html">← 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第07章-AI训练管线/07-01-传感器模块.html">下一节 →</a>
+  </nav>
+</article>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3.7 生成 inline mesh XML · 第 03 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 03 章 · L1 模型描述层  —  子章节 9/21</div>
+    <h1>3.7 生成 inline mesh XML</h1>
+    <div class="chap-meta">
+      <span>阅读约 7 分钟</span>
+      <span>1,717 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">FreeCAD</span><span class="kw">STEP</span><span class="kw">STL</span><span class="kw">Inline Mesh</span><span class="kw">RK4</span><span class="kw">零件污染</span></div>
+  </header>
+  <div class="section-background">
+  <div class="bg-title">📖 本节背景</div>
+  <div class="bg-body">`gen_full_arm.py` 的核心流程： 1. 使用 `trimesh` 库加载 5 个 STL 文件 2. 提取每个 mesh 的顶点与面数据，转换为字符串 3. 计算手臂偏移量 4. 组装 MJCF XML 模板并写入文件</div>
+</div>
+  
+  
+  <div class="knowledge-card summary">
+  <div class="kc-header">本节要点</div>
+  <div class="kc-body"><p>`gen_full_arm.py` 的核心流程：</p></div>
+  <div class="kc-tags"><span class="kc-tag">FreeCAD</span><span class="kc-tag">STEP</span><span class="kc-tag">STL</span><span class="kc-tag">Inline Mesh</span></div>
+</div>
+  
+  <main class="content">
+<h2>3.7 生成 inline mesh XML</h2>
+<h3>3.7.1 生成脚本核心逻辑</h3>
+<p><code>gen_full_arm.py</code> 的核心流程：</p>
+<ol>
+<li>
+<p>使用 <code>trimesh</code> 库加载 5 个 STL 文件</p>
+</li>
+<li>
+<p>提取每个 mesh 的顶点与面数据，转换为字符串</p>
+</li>
+<li>
+<p>计算手臂偏移量</p>
+</li>
+<li>
+<p>组装 MJCF XML 模板并写入文件</p>
+</li>
+</ol>
+<h3>3.7.2 最终模型结构</h3>
+<pre><code class="language-xml">&lt;mujoco model=&quot;electronbot&quot;&gt;
+  &lt;compiler angle=&quot;radian&quot; autolimits=&quot;true&quot;/&gt;
+  &lt;option timestep=&quot;0.002&quot; integrator=&quot;RK4&quot; iterations=&quot;50&quot;/&gt;
+
+  &lt;worldbody&gt;
+    &lt;body name=&quot;base_link&quot; pos=&quot;0 0 47.0&quot;&gt;
+      &lt;geom type=&quot;mesh&quot; mesh=&quot;base_link&quot; mass=&quot;0.045&quot;/&gt;
+      &lt;body name=&quot;body&quot; pos=&quot;0 0 0.03&quot;&gt;
+        &lt;joint name=&quot;body_joint&quot; type=&quot;hinge&quot; axis=&quot;0 0 1&quot;
+               range=&quot;-1.5708 1.5708&quot;/&gt;
+        &lt;geom type=&quot;mesh&quot; mesh=&quot;body&quot; mass=&quot;0.060&quot;/&gt;
+
+        &lt;body name=&quot;head&quot; pos=&quot;0 0 0.07&quot;&gt;
+          &lt;joint name=&quot;head_joint&quot; type=&quot;hinge&quot; axis=&quot;0 1 0&quot;
+                 range=&quot;-0.2618 0.2618&quot;/&gt;
+          &lt;geom type=&quot;mesh&quot; mesh=&quot;head&quot; mass=&quot;0.030&quot;/&gt;
+        &lt;/body&gt;
+
+        &lt;body name=&quot;left_arm&quot; pos=&quot;-0.018 0 0.065&quot;&gt;
+          &lt;joint name=&quot;left_pitch_joint&quot; type=&quot;hinge&quot; axis=&quot;0 1 0&quot;
+                 range=&quot;-1.5708 1.5708&quot;/&gt;
+          &lt;joint name=&quot;left_roll_joint&quot; type=&quot;hinge&quot; axis=&quot;1 0 0&quot;
+                 range=&quot;-0.7854 0.7854&quot;/&gt;
+          &lt;geom type=&quot;mesh&quot; mesh=&quot;left_arm&quot; pos=&quot;-0.0256 0 0&quot; mass=&quot;0.005&quot;/&gt;
+        &lt;/body&gt;
+
+        &lt;!-- 右臂结构同左臂，pos 方向相反 --&gt;
+      &lt;/body&gt;
+    &lt;/body&gt;
+  &lt;/worldbody&gt;
+&lt;/mujoco&gt;
+</code></pre>
+<h3>3.7.3 Actuator 参数</h3>
+<table>
+<thead>
+<tr>
+<th>关节</th>
+<th>舵机</th>
+<th style="text-align: center;">kp</th>
+<th style="text-align: center;">kv</th>
+<th style="text-align: center;">控制范围 (rad)</th>
+<th style="text-align: center;">对应角度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>body_joint</td>
+<td>SG90</td>
+<td style="text-align: center;">80</td>
+<td style="text-align: center;">20</td>
+<td style="text-align: center;">±1.57</td>
+<td style="text-align: center;">±90°</td>
+</tr>
+<tr>
+<td>head_joint</td>
+<td>2g</td>
+<td style="text-align: center;">40</td>
+<td style="text-align: center;">10</td>
+<td style="text-align: center;">±0.26</td>
+<td style="text-align: center;">±15°</td>
+</tr>
+<tr>
+<td>left/right_pitch</td>
+<td>2g</td>
+<td style="text-align: center;">60</td>
+<td style="text-align: center;">15</td>
+<td style="text-align: center;">±1.57</td>
+<td style="text-align: center;">±90°</td>
+</tr>
+<tr>
+<td>left/right_roll</td>
+<td>2g</td>
+<td style="text-align: center;">30</td>
+<td style="text-align: center;">8</td>
+<td style="text-align: center;">±0.79</td>
+<td style="text-align: center;">±45°</td>
+</tr>
+</tbody>
+</table>
+<p>kp 值根据舵机规格确定：SG90 扭矩 1.5kg·cm，kp 可用到 80；2g 舵机扭矩仅 0.2kg·cm，kp 过高会导致震荡。</p>
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>FreeCAD</td><td>开源参数化 CAD 建模软件，支持 Python 脚本和命令行批量导出。</td></tr>
+    <tr><td>STEP</td><td>ISO 10303 标准 CAD 交换格式，保存精确几何与装配关系。</td></tr>
+    <tr><td>STL</td><td>三角网格格式，广泛用于 3D 打印与仿真模型的几何表示。</td></tr>
+    <tr><td>Inline Mesh</td><td>将网格顶点数据直接嵌入 MJCF XML 文件中，确保单文件自包含。</td></tr>
+    <tr><td>RK4</td><td>四阶 Runge-Kutta 数值积分方法，MuJoCo 默认积分器。</td></tr>
+  </table>
+</div>
+  
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 实现逻辑</div>
+  <ol>
+    <li>3.7 生成 inline mesh XML</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    <a class="prev" href="../第03章-从STEP图纸到MJCF模型/03-03-Inline Mesh 方案选择.html">&larr; 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第03章-从STEP图纸到MJCF模型/03-05-仿真稳定性调优.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

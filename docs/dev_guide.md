@@ -1,6 +1,8 @@
 # ElectronBot_SIM 开发指南
 
 > 面向 Ubuntu 22.04 / 24.04，RTX 2060 12GB + CUDA 13.2 环境
+>
+> **硬件文档**：关于 ElectronBot 真机硬件（ESP32-S3、舵机、PCB、焊接），参见 [概要设计 - 真机对接](概要设计/ElectronBot_SIM-概要设计文档.md#8-真机对接) 和 [原版 vs 小智版差异分析](概要设计/ElectronBot-原版vs小智版-差异分析.md)。
 
 ---
 

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.1 固件版本选择与烧录 · ElectronBot-SIM 教学书</title>
+<link rel="stylesheet" href="../_html-page-template.md">
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.78;max-width:860px;margin:32px auto;padding:0 20px;}</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 06 章 · 固件编译与烧录 — 子章节 1/2</div>
+    <h1>6.1 固件版本选择与烧录</h1>
+    <div class="chap-meta">
+      <span>阅读约 8 分钟</span>
+      <span>ElectronBot · ESP32-S3 · v2.2.6-2</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span>
+      <span class="kw">v2.2.6-2</span><span class="kw">WebSocket</span><span class="kw">esptool</span><span class="kw">烧录</span><span class="kw">ESP32-S3</span><span class="kw">在线烧录</span>
+    </div>
+  </header>
+
+  <div class="section-background">
+    <div class="bg-title">上下文回顾</div>
+    <div class="bg-body">
+      上一章你实现了 MCP 协议桥接层，现在需要<b>在真机上验证 MCP 通信和舵机控制是否与仿真一致</b>。
+      但在此之前，真机固件必须升级到支持 WebSocket 直连的版本。
+    </div>
+  </div>
+
+  <div class="knowledge-card">
+    <div class="kc-header">关键发现：v2.2.6-2 的 WebSocket Server</div>
+    <div class="kc-body">
+      原设计文档假设"真机无 WebSocket Server，必须通过云端 API 透传"。<br>
+      但 <b>2026-06-16 发布的 v2.2.6-2</b> 已内置 <code>ws://&lt;IP&gt;:8080/ws</code> WebSocket 调试服务！<br>
+      这意味着你可以直接从 Python 端通过 WebSocket 控制真机，延迟从 200-500ms 降至 &lt;10ms。
+    </div>
+  </div>
+
+  <main class="content">
+    <h2>固件版本对比</h2>
+    <table>
+      <tr><th>版本</th><th>发布日期</th><th>关键特性</th><th>WebSocket 直连</th></tr>
+      <tr style="background:#e8f5e9;"><td><b>v2.2.6-2</b></td><td>2026-06-16</td><td>新增 WebSocket 在线调试控制服务</td><td>✅</td></tr>
+      <tr><td>v2.2.6</td><td>2026-06-10</td><td>优化动作收尾与自适应归位平滑度</td><td>❌</td></tr>
+      <tr><td>v2.0.4</td><td>2025-11-03</td><td>更新到小智 2.0</td><td>❌</td></tr>
+      <tr><td>v1.1.3</td><td>2025-06-13</td><td>新增舵机初始位置 MCP 校准</td><td>❌</td></tr>
+    </table>
+
+    <h2>三种通信路径（v2.2.6-2 时代）</h2>
+    <table>
+      <tr><th>路径</th><th>通信方式</th><th>延迟</th><th>适用场景</th></tr>
+      <tr style="background:#e8f5e9;"><td><b>WebSocket 直连</b></td><td>ws://IP:8080/ws</td><td>&lt;10ms</td><td><b>调试、实时控制、策略部署（推荐）</b></td></tr>
+      <tr><td>云端 API 透传</td><td>HTTPS→云端→MQTT/WS→ESP32</td><td>200-500ms</td><td>远程控制、生产部署</td></tr>
+      <tr><td>ONNX 本地推理</td><td>策略→ONNX→MCP序列→WS</td><td>&lt;10ms</td><td>RL/IL 策略部署</td></tr>
+    </table>
+
+    <h2>方法一：在线一键烧录（最简单）</h2>
+    <ol>
+      <li>用 Chrome/Edge 浏览器打开 <a href="https://electronbot.tech/docs/downloads">https://electronbot.tech/docs/downloads</a></li>
+      <li>固件版本选择：<b>v2.2.6-2</b></li>
+      <li>点击"在线烧录"按钮</li>
+      <li>浏览器弹出 USB 串口选择框，选择 ElectronBot 对应 COM 口</li>
+      <li>等待烧录完成，自动重启</li>
+    </ol>
+
+    <div class="knowledge-card concept">
+      <div class="kc-header">提示：下载模式</div>
+      <div class="kc-body">
+        若浏览器无法识别设备，<b>按住主板 BOOT 按钮再上电</b>进入下载模式，然后重试。
+      </div>
+    </div>
+
+    <h2>方法二：esptool 命令行（推荐 Linux/macOS 用户）</h2>
+    <pre><code># 安装 esptool
+pip install esptool
+
+# 下载固件
+wget https://electronbot.tech/assets/files/electronbot2.2.6-2-8777ea4d7e4cb1fe838db75ac1b55ecc.bin
+
+# 确认串口
+ls /dev/ttyUSB*  # 或 /dev/ttyACM*
+
+# 烧录
+esptool.py --chip esp32s3 --port /dev/ttyUSB0 --baud 921600 \
+  --before default_reset --after hard_reset \
+  write_flash -z --flash_mode dio --flash_size 16MB \
+  0x0 electronbot2.2.6-2-8777ea4d7e4cb1fe838db75ac1b55ecc.bin</code></pre>
+
+    <h2>验证烧录成功</h2>
+    <pre><code># 1. 用串口监控确认配网
+minicom -D /dev/ttyUSB0 -b 115200
+# 应看到 Wi-Fi 连接日志和 IP 地址获取
+
+# 2. 测试 WebSocket 直连（假设真机 IP = 192.168.1.100）
+websocat ws://192.168.1.100:8080/ws
+> {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_status","arguments":{}},"id":1}}
+< {"type":"mcp","payload":{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"idle"}],"isError":false}}}
+
+# 3. 测试手部动作
+> {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":3,"hand":3,"steps":2,"speed":600}},"id":2}}
+# → 机器人应挥手</code></pre>
+
+    <h2>常见问题</h2>
+    <table>
+      <tr><th>问题</th><th>原因</th><th>解决</th></tr>
+      <tr><td><code>Failed to connect to ESP32-S3</code></td><td>未进入下载模式</td><td>按住 BOOT 按钮再上电</td></tr>
+      <tr><td><code>Invalid head of packet</code></td><td>波特率过高</td><td>降至 115200</td></tr>
+      <tr><td>WebSocket <code>Connection refused</code></td><td>固件不是 v2.2.6-2</td><td>升级到 v2.2.6-2</td></tr>
+      <tr><td>连接后立即断开</td><td>非 MCP 格式消息</td><td>使用 <code>{"type":"mcp","payload":{...}}</code> 格式</td></tr>
+    </table>
+
+    <div class="logic-summary">
+      <div class="ls-title">本节逻辑小结</div>
+      <ol>
+        <li>v2.2.6-2 是验证真机 MCP 通信的最低版本（WebSocket 直连）</li>
+        <li>在线一键烧录最简单，esptool 适合自动化脚本</li>
+        <li>烧录后用 <code>websocat</code> 验证 WebSocket 通信正常</li>
+      </ol>
+    </div>
+  </main>
+
+  <nav class="chap-nav">
+    <a class="prev" href="../第05章-MCP协议层与统一后端/05-03-MCP 工具清单.html">← 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="06-02-源码编译与自定义.html">下一节 →</a>
+  </nav>
+</article>
+</body>
+</html>

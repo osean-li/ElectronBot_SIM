@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.1 项目背景 · 第 01 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 01 章 · 导论 · 全局  —  子章节 1/21</div>
+    <h1>1.1 项目背景</h1>
+    <div class="chap-meta">
+      <span>阅读约 6 分钟</span>
+      <span>1,565 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">ElectronBot</span><span class="kw">MuJoCo</span><span class="kw">MJCF</span><span class="kw">Gymnasium</span><span class="kw">MCP</span><span class="kw">Sim2Real</span><span class="kw">强化学习</span><span class="kw">分层架构</span></div>
+  </header>
+  <div class="section-background">
+  <div class="bg-title">📖 为什么需要这个项目</div>
+  <div class="bg-body">ElectronBot 是稚晖君 2023 年开源的一款桌面双臂机器人——6 个舵机、全 3D 打印、巴掌大小。但要复现它，你得有打印机、买舵机、焊 ESP32、刷固件。更关键的是：<b>强化学习训练需要数百万次交互，真机舵机几分钟就烧</b>。碰撞、摔落、过度旋转——每个 AI 的试错在真机上都是物理损坏。ElectronBot-SIM 在 MuJoCo 里建了一个 1:1 的数字孪生：相同的 6 关节结构、相同的运动学约束、相同的控制接口——你今天在电脑前写的每一行代码，未来买到硬件时都直接可用。整条链路在一台 RTX 2060 上即可跑通。</div>
+</div>
+  <figure class="diagram">
+<svg viewBox="0 0 680 380" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#eaf1ff"/><stop offset="100%" stop-color="#d4e2ff"/></linearGradient></defs>
+  <text x="340" y="28" text-anchor="middle" font-size="18" font-weight="700" fill="#1f2430">ElectronBot-SIM 七层系统架构</text>
+  <rect x="80" y="52" width="520" height="38" rx="8" fill="url(#g1)" stroke="#2f6df0" stroke-width="1.5"/>
+  <text x="340" y="77" text-anchor="middle" font-size="14" font-weight="600" fill="#2a4d9b">L7 应用与部署 — ESP32 / Sim2Real / 云端 API</text>
+  <line x1="140" y1="90" x2="140" y2="102" stroke="#2f6df0" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="80" y="102" width="520" height="38" rx="8" fill="url(#g1)" stroke="#2f6df0" stroke-width="1.5"/>
+  <text x="340" y="127" text-anchor="middle" font-size="14" font-weight="600" fill="#2a4d9b">L6 决策层 — BC 模仿学习 / PPO 强化学习 / VLA</text>
+  <line x1="140" y1="140" x2="140" y2="152" stroke="#2f6df0" stroke-width="1.5"/>
+  <rect x="80" y="152" width="520" height="38" rx="8" fill="url(#g1)" stroke="#2f6df0" stroke-width="1.5"/>
+  <text x="340" y="177" text-anchor="middle" font-size="14" font-weight="600" fill="#2a4d9b">L5 传感器层 — 关节角度 / 相机 / 接触力 / IMU</text>
+  <line x1="140" y1="190" x2="140" y2="202" stroke="#2f6df0" stroke-width="1.5"/>
+  <rect x="80" y="202" width="520" height="38" rx="8" fill="url(#g1)" stroke="#2f6df0" stroke-width="1.5"/>
+  <text x="340" y="227" text-anchor="middle" font-size="14" font-weight="600" fill="#2a4d9b">L4 协议层 — MCP / JSON-RPC 2.0 / WebSocket 调试</text>
+  <line x1="140" y1="240" x2="140" y2="252" stroke="#2f6df0" stroke-width="1.5"/>
+  <rect x="80" y="252" width="520" height="38" rx="8" fill="url(#g1)" stroke="#2f6df0" stroke-width="1.5"/>
+  <text x="340" y="277" text-anchor="middle" font-size="14" font-weight="600" fill="#2a4d9b">L3 动作系统 — 6 舵机控制 / 12 种预设动作 / 插值对齐</text>
+  <line x1="140" y1="290" x2="140" y2="302" stroke="#2f6df0" stroke-width="1.5"/>
+  <rect x="80" y="302" width="520" height="38" rx="8" fill="url(#g1)" stroke="#2f6df0" stroke-width="1.5"/>
+  <text x="340" y="327" text-anchor="middle" font-size="14" font-weight="600" fill="#2a4d9b">L2 仿真引擎 — MuJoCo 刚体动力学 / Gymnasium 环境</text>
+  <line x1="140" y1="340" x2="140" y2="352" stroke="#2f6df0" stroke-width="1.5"/>
+  <rect x="80" y="352" width="520" height="38" rx="8" fill="url(#g1)" stroke="#2f6df0" stroke-width="1.5"/>
+  <text x="340" y="377" text-anchor="middle" font-size="14" font-weight="600" fill="#2a4d9b">L1 模型描述 — STEP → STL → MJCF 物理模型</text>
+</svg>
+<figcaption>图：ElectronBot-SIM 七层架构全景（自底向上：建模 → 仿真 → 控制 → 协议 → 感知 → 决策 → 部署）</figcaption>
+</figure>
+  <div class="knowledge-card concept">
+  <div class="kc-header">核心概念：数字孪生 + MCP 分界线</div>
+  <div class="kc-body"><p>ElectronBot-SIM 的设计围绕两条核心原则展开：</p><ul><li><b>数字孪生</b>：MuJoCo 中的虚拟 ElectronBot 拥有与真机完全相同的 6 关节运动学链、舵机映射比、硬限位和安全裁剪逻辑。仿真行为 1:1 对齐真机固件源码（movements.cc），不做"优化"或"美化"。</li><li><b>MCP 是唯一分界线</b>：AI 策略层只发送 JSON-RPC 命令，完全不感知下面是 MuJoCo 仿真还是 ESP32 真机。切换只需改一行代码：<code>ElectronBotBackend("sim")</code> ↔ <code>ElectronBotBackend("cloud")</code>。</li></ul></div>
+  <div class="kc-tags"><span class="kc-tag">数字孪生</span><span class="kc-tag">七层架构</span><span class="kc-tag">MCP分界线</span><span class="kc-tag">1:1对齐</span></div>
+</div>
+  <main class="content">
+<h2>1.1 问题：机器人开发的两道门槛</h2>
+<p>想在桌面机器人上跑 AI？你面前有两道门槛。</p>
+<p><b>第一道：硬件门槛。</b>ElectronBot 的 24 个 3D 打印零件、6 个舵机（SG90 + 2g + 4.3g）、一块 ESP32-S3 主控、焊接、固件刷写——对想入门机器人但手头没有硬件的人来说，任何一环都是死路。</p>
+<p><b>第二道：安全门槛。</b>即使你有了真机，强化学习需要数百万次试错。PPO 训练 100 万步，意味着 6 个舵机要来回转动数百万次——SG90 这种微型舵机的寿命通常只有几百小时，在 RL 训练中几分钟就可能过热烧毁。碰撞、摔落、关节极限——仿真里只是一行错误日志，真机上是物理损坏。</p>
+<p>这两道门槛指向同一个答案：<b>先在仿真里把策略训好，再部署到真机。</b> 但这里又有一个新问题——仿真和真机之间通常存在巨大的"Sim2Real Gap"：仿真里的行为在真机上跑不起来，因为模型精度不够、物理参数不对、控制接口不兼容。</p>
+<p>ElectronBot-SIM 的核心贡献，就是用 <b>MuJoCo 1:1 复现 ElectronBot 的物理模型</b>，用 <b>MCP 协议统一仿真和真机的控制接口</b>，把 Sim2Real Gap 压缩到最小。</p>
+
+<h2>1.2 七层架构：从 CAD 图纸到真机部署</h2>
+<p>项目代码按功能划分为四个独立包，对应一套 7 层逻辑架构：</p>
+
+<h3>L1 · 模型描述层</h3>
+<p>输入：ElectronBot.step（30.5MB，24 个零件）。经过 FreeCAD 按运动组合并导出→5 组 STL（base_link / body / head / left_arm / right_arm）→generate_inline_mesh.py 嵌入→单个 MJCF 文件（~1.7MB，零外部依赖）。这是全书的物理基础，第三章将完整走通这条链路。</p>
+
+<h3>L2 · 物理仿真引擎</h3>
+<p>MuJoCo 3.x 提供刚体动力学核心：7 个 body（运动学链从 base_link 到左右手指尖）、6 个 hinge 关节、6 个 position actuator（50Hz 控制频率，kp/kv 按舵机规格校准）。渲染后端同时支持 OpenGL（本地开发）和 EGL（headless 训练）。域随机化工具在此层注入物理参数噪声。</p>
+
+<h3>L3 · 动作系统层</h3>
+<p><code>ElectronBotActions</code> 类封装了 12 种预设动作（举手/挥手/拍打/点头/转体等），以及舵机级精确控制接口 <code>servo_move()</code>。关键设计决策：<b>线性插值而非缓动曲线</b>——因为真机固件的 <code>MoveServos()</code>（movements.cc:87）用的就是线性插值，仿真必须 1:1 对齐。安全裁剪 <code>ClampServoTarget()</code> 复现了固件的 6 组硬限位。</p>
+
+<h3>L4 · MCP 协议层</h3>
+<p>这是架构中最关键的一层。McpSimBridge 实现了与真机完全一致的 MCP JSON-RPC 协议：<code>method: "tools/call"</code>，<code>params.name: "self.electron.xxx"</code>。注册了 12 个工具——其中 8 个与真机 release v2.2.6 完全对齐，4 个为仿真专属（servo_move / servo_sequences / home / get_ip）。McpSimBridge 同时兼容标准 MCP 嵌套格式和仿真内部扁平格式，方便调试。</p>
+
+<h3>L5 · 传感器与观测层</h3>
+<p>提供三种传感器——JointSensor（关节位置+速度）、CameraSensor（RGB+Depth+Segmentation，仿真专属）、ContactSensor（接触力）——由 ObservationBuilder 组装为两种观测模式：<code>obs_mode="full"</code>（研究用，含视觉和精确关节反馈）和 <code>obs_mode="realistic"</code>（Sim2Real 用，仅含真机可得数据：指令角度 + 运动状态 + 电池电压）。</p>
+
+<h3>L6 · 智能决策层</h3>
+<p>三条训练管线，难度递增：① <b>BC 模仿学习</b>——录制 12 种预设动作的专家轨迹，MSE 监督学习 50 epochs 得到初始策略；② <b>PPO 强化学习</b>——16-32 并行 MuJoCo 环境 + 域随机化，在 BC 策略基础上精调；③ <b>文本 VLA</b>——LLM（如本地 Qwen2.5）将自然语言指令分解为 MCP 工具调用序列，行为树引擎（py_trees）执行。</p>
+
+<h3>L7 · 应用与评估层</h3>
+<p>Benchmark 套件包含 7 个标准任务（reach / push / pick_place / stack / follow / gesture × 5 项指标）。Sim2Real 部署提供三种模式：模式 A（云端 API 透传，立即可用）、模式 B（ONNX 本地推理，需固件 OTA）、模式 C（WebSocket 直连，<10ms 延迟，需固件 OTA）。真机校准工具 <code>calibrate.py</code> 将 6 维 trim 偏置写入 ESP32 NVS。</p>
+
+<h3>模块依赖关系</h3>
+<p>四个 Python 包的依赖方向严格单向：<code>electronbot_benchmark → electronbot_ai → electronbot_sim → MuJoCo</code>。其中 <code>electronbot_sim</code>（L2-L5）零 AI 依赖，可独立运行和测试。Sim2Real 包横跨 L4 和 L7，通过 Backend API 桥接仿真和云端。</p>
+
+<h2>1.3 本书阅读路线</h2>
+<p>本章为导论。后续六章按项目实际实施顺序展开，每一章覆盖一层或多层架构：</p>
+<ul>
+<li><b>第二章 · 环境搭建与首次模型加载</b>（L1 入口）— 30 分钟跑通第一个仿真机器人</li>
+<li><b>第三章 · 从 STEP 图纸到 MJCF 模型</b>（L1 核心）— 24 个零件变可仿真机器人</li>
+<li><b>第四章 · Gymnasium 环境与动作系统</b>（L2+L3）— 封装标准 RL 环境 + 12 种动作</li>
+<li><b>第五章 · MCP 协议层的实现</b>（L4）— AI 用同一句话驱动仿真与真机</li>
+<li><b>第六章 · AI 训练管线的实现</b>（L5+L6）— BC → PPO → 域随机化</li>
+<li><b>第七章 · Sim2Real 部署实践</b>（L7）— 策略零修改上真机 + 校准排错</li>
+</ul>
+<p>每章末尾均附有<b>"设计文档 vs 实际实现"差异表</b>。这些差异不是 bug，而是工程实践中设计如何被现实修正的真实记录。</p>
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>MuJoCo</td><td>Multi-Joint dynamics with Contact，Google 维护的开源刚体动力学仿真器，使用 RK4 积分器，原生 Python 绑定。</td></tr>
+    <tr><td>MJCF</td><td>MuJoCo XML 模型格式，定义 body（刚体）/ joint（关节）/ geom（几何体）/ actuator（执行器）的层级树。</td></tr>
+    <tr><td>MCP</td><td>Model Context Protocol，基于 JSON-RPC 2.0 的 AI-工具交互协议。本项目用它桥接仿真与真机。</td></tr>
+    <tr><td>Sim2Real</td><td>Simulation to Reality，从仿真训练的策略迁移到真实硬件。域随机化是缩小差距的主流方法。</td></tr>
+    <tr><td>Gymnasium</td><td>OpenAI Gym 继任者，标准 RL 环境接口规范（reset / step / render / close）。</td></tr>
+    <tr><td>Inline Mesh</td><td>将 STL 网格顶点数据直接嵌入 MJCF XML 中，实现单文件自包含（~1.7MB），零外部依赖。</td></tr>
+  </table>
+</div>
+  <div class="code-index">
+  <div class="ci-title">📂 项目顶层代码组织</div>
+  <div class="ci-item"><span class="ci-file">src/electronbot_sim/</span><span class="ci-desc">— 仿真核心包（L2-L5），零 AI 依赖，独立可测。包含 env.py / mcp_bridge.py / backend.py / actions/ / sensors/</span></div>
+  <div class="ci-item"><span class="ci-file">src/electronbot_ai/</span><span class="ci-desc">— AI 训练包（L6），依赖 electronbot_sim。包含 il/（BC/ACT）/ rl/（PPO/SAC）/ vla/（LLM→MCP）/ tasks/（7 个标准任务）</span></div>
+  <div class="ci-item"><span class="ci-file">src/electronbot_benchmark/</span><span class="ci-desc">— 评估包（L7）。suite.py / run.py / report.py，7 任务 × 5 指标标准化评估</span></div>
+  <div class="ci-item"><span class="ci-file">src/electronbot_sim2real/</span><span class="ci-desc">— Sim2Real 部署包（L7）。deploy_cloud.py（云端）/ deploy_onnx.py（本地）/ deploy_websocket.py（直连）/ calibrate.py（校准）</span></div>
+  <div class="ci-item"><span class="ci-file">assets/</span><span class="ci-desc">— 静态资产（L1）。cad/（STEP 图纸）/ meshes/（5 组 STL）/ mjcf/（MJCF 模型 + 场景文件）</span></div>
+</div>
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 实现逻辑</div>
+  <ol>
+    <li><b>建模先行</b>（L1）— ElectronBot.step → FreeCAD 按运动组合并 → 5 组 STL → generate_inline_mesh.py → MJCF 单文件</li>
+    <li><b>引擎驱动</b>（L2）— MuJoCo 加载 MJCF → 7 body 运动学链 + 6 hinge 关节 + 6 position actuator → Gymnasium 封装</li>
+    <li><b>控制对齐</b>（L3）— ElectronBotActions 1:1 复现固件 movements.cc → 线性插值 + 6 组硬限位 + 12 种预设动作</li>
+    <li><b>协议桥接</b>（L4）— McpSimBridge 注册 12 个 MCP 工具 → 双格式兼容（标准 MCP + 扁平调试）→ Backend API 统一 sim/cloud</li>
+    <li><b>训练闭环</b>（L5+L6）— BC 模仿学习初始策略 → PPO 强化学习域随机化精调 → VLA 文本规划 → Benchmark 评估</li>
+    <li><b>真机部署</b>（L7）— 策略经 Backend API 零修改下放 → 云端透传（模式A）/ WebSocket 直连（模式C）/ ONNX 本地（模式B）→ 校准 tools</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第02章-环境搭建与首次模型加载/02-01-确认环境依赖.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

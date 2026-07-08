@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5.1 章节目标 · 第 05 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 05 章 · L4 协议层  —  子章节 14/21</div>
+    <h1>5.1 章节目标</h1>
+    <div class="chap-meta">
+      <span>阅读约 10 分钟</span>
+      <span>2,389 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">MCP</span><span class="kw">JSON-RPC 2.0</span><span class="kw">McpSimBridge</span><span class="kw">Backend</span><span class="kw">WebSocket</span><span class="kw">双协议</span><span class="kw">标准 MCP 格式</span><span class="kw">扁平格式</span></div>
+  </header>
+<div class="section-background" style="background:#f0fdf6;border-left-color:#2f6f4f;">
+  <div class="bg-title" style="color:#2f6f4f;">🏗️ 本章对应 L4 协议层</div>
+  <div class="bg-body" style="color:#1a5c3a;">
+  MCP 协议层是<b>仿真与真机的唯一分界线</b>。AI 策略只发送 JSON-RPC 命令，完全不感知下面是 MuJoCo 还是 ESP32。<br>
+  通信链路：<b>AI→McpSimBridge→ElectronBotActions→MuJoCo</b>（仿真）或 <b>AI→McpCloudBridge→小智云端→MQTT/WS→ESP32</b>（真机）。<br>
+  McpSimBridge 同时兼容两种格式：标准 MCP tools/call 嵌套格式（与真机一致）和扁平格式（仿真调试用）。
+  </div>
+</div>
+  <div class="section-background">
+  <div class="bg-title">📖 本节背景</div>
+  <div class="bg-body">本章从概要设计文档的 Layer 4（MCP 协议层）出发，目标为： 1. 实现 `McpSimBridge`——仿真端 JSON-RPC 解析器 2. 支持标准 MCP 格式与扁平调试格式双协议 3. 实现 `ElectronBotBackend`——统一后端 API，一行切换 sim/cloud 模式</div>
+</div>
+  
+  <figure class="diagram">
+<svg viewBox="0 0 680 220" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="a5" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2f6df0"/></marker></defs>
+  <text x="340" y="26" text-anchor="middle" font-size="17" font-weight="700" fill="#1f2430">MCP 协议层：AI ↔ 仿真/真机 通信链路</text>
+  <rect x="30" y="50" width="140" height="100" rx="10" fill="#eaf1ff" stroke="#2f6df0" stroke-width="2"/>
+  <text x="100" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#2a4d9b">AI 客户端</text><text x="100" y="102" text-anchor="middle" font-size="11" fill="#5b6472">LLM / Agent</text><text x="100" y="122" text-anchor="middle" font-size="11" fill="#5b6472">任意语言接入</text>
+  <line x1="170" y1="100" x2="210" y2="100" stroke="#2f6df0" stroke-width="2" marker-end="url(#a5)"/>
+  <rect x="212" y="50" width="140" height="100" rx="10" fill="#fff7e6" stroke="#f5a623" stroke-width="2"/>
+  <text x="282" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#7a4b00">McpSimBridge</text><text x="282" y="102" text-anchor="middle" font-size="11" fill="#6b4e00">JSON-RPC 2.0</text><text x="282" y="122" text-anchor="middle" font-size="11" fill="#6b4e00">12 工具注册</text>
+  <line x1="352" y1="100" x2="392" y2="100" stroke="#f5a623" stroke-width="2" marker-end="url(#a5)"/>
+  <rect x="394" y="50" width="140" height="100" rx="10" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="2"/>
+  <text x="464" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#1a5c3a">Backend API</text><text x="464" y="102" text-anchor="middle" font-size="11" fill="#3a6b4f">统一抽象</text><text x="464" y="122" text-anchor="middle" font-size="11" fill="#3a6b4f">双协议切换</text>
+  <line x1="534" y1="75" x2="574" y2="75" stroke="#2f6f4f" stroke-width="1.5"/><line x1="534" y1="125" x2="574" y2="125" stroke="#2f6f4f" stroke-width="1.5"/>
+  <rect x="576" y="58" width="84" height="34" rx="6" fill="#d4e2ff" stroke="#2f6df0" stroke-width="1"/><text x="618" y="79" text-anchor="middle" font-size="11" fill="#2a4d9b">MuJoCo</text>
+  <rect x="576" y="108" width="84" height="34" rx="6" fill="#d4e2ff" stroke="#2f6df0" stroke-width="1"/><text x="618" y="129" text-anchor="middle" font-size="11" fill="#2a4d9b">ESP32</text>
+  <text x="340" y="195" text-anchor="middle" font-size="12" fill="#5b6472">WebSocket 调试服务器（ws://localhost:8765）· 12 工具清单 · 通信延迟 &lt;10ms（仿真）</text>
+</svg>
+<figcaption>图：MCP 协议层在 AI 客户端与仿真/真机之间的桥接角色</figcaption>
+</figure>
+  <div class="knowledge-card summary">
+  <div class="kc-header">本节要点</div>
+  <div class="kc-body"><p>本章从概要设计文档的 Layer 4（MCP 协议层）出发，目标为：</p></div>
+  <div class="kc-tags"><span class="kc-tag">MCP</span><span class="kc-tag">JSON-RPC 2.0</span><span class="kc-tag">McpSimBridge</span><span class="kc-tag">Backend</span></div>
+</div>
+  
+  <main class="content">
+<h2>5.1 章节目标</h2>
+<p>本章从概要设计文档的 Layer 4（MCP 协议层）出发，目标为：</p>
+<ol>
+<li>
+<p>实现 <code>McpSimBridge</code>——仿真端 JSON-RPC 解析器</p>
+</li>
+<li>
+<p>支持标准 MCP 格式与扁平调试格式双协议</p>
+</li>
+<li>
+<p>实现 <code>ElectronBotBackend</code>——统一后端 API，一行切换 sim/cloud 模式</p>
+</li>
+<li>
+<p>实现 WebSocket 调试服务器</p>
+</li>
+</ol>
+<h2>5.2 MCP 协议格式</h2>
+<p>MCP（Model Context Protocol）基于 JSON-RPC 2.0 规范，定义 AI 与机器人之间的标准通信协议。</p>
+<h3>5.2.1 请求格式</h3>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;mcp&quot;,
+  &quot;payload&quot;: {
+    &quot;jsonrpc&quot;: &quot;2.0&quot;,
+    &quot;method&quot;: &quot;tools/call&quot;,
+    &quot;params&quot;: {
+      &quot;name&quot;: &quot;self.electron.hand_action&quot;,
+      &quot;arguments&quot;: {
+        &quot;action&quot;: 3,
+        &quot;hand&quot;: 3,
+        &quot;steps&quot;: 2,
+        &quot;speed&quot;: 600
+      }
+    },
+    &quot;id&quot;: 3
+  }
+}
+</code></pre>
+<p>各字段含义：</p>
+<ul>
+<li>
+<p><code>type: "mcp"</code>：消息类型标识，用于区分同一通信通道上的不同消息类型</p>
+</li>
+<li>
+<p><code>method: "tools/call"</code>：固定值，表示工具调用</p>
+</li>
+<li>
+<p><code>params.name</code>：实际工具名称，遵循 <code>self.electron.xxx</code> 命名约定</p>
+</li>
+<li>
+<p><code>params.arguments</code>：工具的参数键值对</p>
+</li>
+</ul>
+<h3>5.2.2 响应格式</h3>
+<pre><code class="language-json">{
+  &quot;jsonrpc&quot;: &quot;2.0&quot;,
+  &quot;id&quot;: 3,
+  &quot;result&quot;: {
+    &quot;content&quot;: [
+      {&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;true&quot;}
+    ],
+    &quot;isError&quot;: false
+  }
+}
+</code></pre>
+<h2>5.3 McpSimBridge 实现</h2>
+<h3>5.3.1 工具注册</h3>
+<p>Bridge 采用注册表模式，不实现动作逻辑，仅做 JSON ↔ Python 方法调用的转换：</p>
+<pre><code class="language-python">class McpSimBridge:
+    def __init__(self, actions):
+        self.actions = actions
+        self._tools = {}
+        self._register_tools()
+
+    def _register_tools(self):
+        self._tools = {
+            &quot;self.electron.hand_action&quot;:    self.actions.hand_action,
+            &quot;self.electron.body_turn&quot;:      self.actions.body_turn,
+            &quot;self.electron.head_move&quot;:      self.actions.head_move,
+            &quot;self.electron.stop&quot;:           self.actions.stop,
+            &quot;self.electron.servo_move&quot;:     self.actions.servo_move,
+            &quot;self.electron.servo_sequences&quot;: self.actions.servo_sequences,
+            &quot;self.electron.home&quot;:           self.actions.home,
+            &quot;self.electron.get_status&quot;:     self._get_status,
+            &quot;self.electron.set_trim&quot;:       self._set_trim,
+            &quot;self.electron.get_trims&quot;:      self._get_trims,
+            &quot;self.battery.get_level&quot;:       self._get_battery_level,
+            &quot;self.electron.get_ip&quot;:         self._get_ip,
+        }
+</code></pre>
+<h3>5.3.2 双格式兼容</h3>
+<p>Bridge 同时支持两种输入格式：</p>
+<p><strong>标准 MCP 格式</strong>（与真机一致）：</p>
+<pre><code class="language-python">if method == &quot;tools/call&quot;:
+    tool_name = request[&quot;params&quot;][&quot;name&quot;]
+    tool_args = request[&quot;params&quot;].get(&quot;arguments&quot;, {})
+</code></pre>
+<p><strong>扁平格式</strong>（仿真调试用，去一层嵌套）：</p>
+<pre><code class="language-python"># method 直接为工具名
+else:
+    tool_name = method
+    tool_args = request.get(&quot;params&quot;, {})
+</code></pre>
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>MCP</td><td>Model Context Protocol，基于 JSON-RPC 2.0 的 AI-工具交互协议。</td></tr>
+    <tr><td>Backend</td><td>本项目中的统一抽象层，封装仿真（MuJoCo）与真机（ESP32）的通信细节。</td></tr>
+    <tr><td>WebSocket</td><td>基于 TCP 的全双工通信协议，用于 MCP 调试服务器与客户端的实时交互。</td></tr>
+  </table>
+</div>
+  <div class="code-index">
+  <div class="ci-title">📂 本节涉及的函数 / 类</div>
+  <div class="ci-item"><span class="ci-func">McpSimBridge()</span></div>
+  <div class="ci-item"><span class="ci-func">__init__()</span></div>
+  <div class="ci-item"><span class="ci-func">_register_tools()</span></div>
+</div>
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 实现逻辑</div>
+  <ol>
+    <li>5.1 章节目标</li>
+    <li>5.2 MCP 协议格式</li>
+    <li>5.3 McpSimBridge 实现</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    <a class="prev" href="../第04章-Gymnasium环境与动作系统/04-02-动作系统.html">&larr; 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第05章-MCP协议层的实现/05-02-统一 Backend API.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

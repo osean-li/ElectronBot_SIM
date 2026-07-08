@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4.3 动作系统 · 第 04 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 04 章 · L2 仿真引擎 + L3 动作系统  —  子章节 13/21</div>
+    <h1>4.3 动作系统</h1>
+    <div class="chap-meta">
+      <span>阅读约 12 分钟</span>
+      <span>2,877 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">Gymnasium</span><span class="kw">Env 封装</span><span class="kw">obs_mode</span><span class="kw">动作系统</span><span class="kw">插值对齐</span><span class="kw">舵机映射比</span><span class="kw">映射比</span><span class="kw">硬限位</span></div>
+  </header>
+  <div class="section-background">
+  <div class="bg-title">📖 本节背景</div>
+  <div class="bg-body">`ElectronBotActions` 按抽象层级分为三层： 第一层：预设动作（用户级） hand_action() / body_turn() / head_move() / stop() / home()</div>
+</div>
+  
+  
+  <div class="knowledge-card summary">
+  <div class="kc-header">本节要点</div>
+  <div class="kc-body"><p>`ElectronBotActions` 按抽象层级分为三层：</p></div>
+  <div class="kc-tags"><span class="kc-tag">Gymnasium</span><span class="kc-tag">Env 封装</span><span class="kc-tag">obs_mode</span><span class="kc-tag">动作系统</span></div>
+</div>
+  
+  <main class="content">
+<h2>4.3 动作系统</h2>
+<h3>4.3.1 三层架构</h3>
+<p><code>ElectronBotActions</code> 按抽象层级分为三层：</p>
+<pre><code>第一层：预设动作（用户级）
+  hand_action() / body_turn() / head_move() / stop() / home()
+
+第二层：舵机级控制（AI 级）
+  servo_move() / servo_sequences()
+
+第三层：内部执行（固件对齐）
+  _move_servos() — 线性插值
+  _oscillate() — 正弦振荡
+</code></pre>
+<h3>4.3.2 固件行为对齐</h3>
+<p>真机固件 <code>movements.cc</code> 第 87 行的插值实现为：</p>
+<pre><code class="language-c">increment_[i] = (target[i] - pos[i]) / (time / 10.0);
+</code></pre>
+<p>对应 Python 实现：</p>
+<pre><code class="language-python">def _move_servos(self, targets, time_ms):
+    n_steps = max(1, time_ms // 10)
+    delta = (targets - current) / n_steps
+    for _ in range(n_steps):
+        current += delta
+        self.env.data.ctrl[:] = current
+        for _ in range(10):
+            mujoco.mj_step(self.env.model, self.env.data)
+</code></pre>
+<p>对齐的要素包括：</p>
+<ul>
+<li>
+<p>每 10ms 步进的等量增量插值</p>
+</li>
+<li>
+<p>6 组舵机硬限位裁剪 <code>ClampServoTarget()</code></p>
+</li>
+<li>
+<p>舵机→关节映射比（1.0/1.125/1.5/2.0）</p>
+</li>
+<li>
+<p>50Hz 控制频率（20ms 周期）</p>
+</li>
+</ul>
+<h3>4.3.3 舵机映射比与硬限位</h3>
+<p><strong>映射比</strong>：舵机 PWM 控制范围与机械关节范围的换算关系。</p>
+<table>
+<thead>
+<tr>
+<th>关节</th>
+<th style="text-align: center;">舵机安全范围</th>
+<th style="text-align: center;">中心</th>
+<th style="text-align: center;">机械范围</th>
+<th style="text-align: center;">映射比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BODY</td>
+<td style="text-align: center;">30°~150°</td>
+<td style="text-align: center;">90°</td>
+<td style="text-align: center;">±90°</td>
+<td style="text-align: center;">1.5</td>
+</tr>
+<tr>
+<td>HEAD</td>
+<td style="text-align: center;">75°~105°</td>
+<td style="text-align: center;">90°</td>
+<td style="text-align: center;">±30°</td>
+<td style="text-align: center;">2.0</td>
+</tr>
+<tr>
+<td>ARM_PITCH</td>
+<td style="text-align: center;">0°~180°</td>
+<td style="text-align: center;">90°</td>
+<td style="text-align: center;">±90°</td>
+<td style="text-align: center;">1.0</td>
+</tr>
+<tr>
+<td>LEFT_ROLL</td>
+<td style="text-align: center;">0°~80°</td>
+<td style="text-align: center;">40°</td>
+<td style="text-align: center;">±45°</td>
+<td style="text-align: center;">1.125</td>
+</tr>
+<tr>
+<td>RIGHT_ROLL</td>
+<td style="text-align: center;">100°~180°</td>
+<td style="text-align: center;">140°</td>
+<td style="text-align: center;">±45°</td>
+<td style="text-align: center;">1.125</td>
+</tr>
+</tbody>
+</table>
+<p><strong>硬限位</strong>：任何角度指令超过以下范围将被裁剪至边界：</p>
+<pre><code class="language-python">SERVO_LIMITS = {
+    &quot;rp&quot;: (0, 180),    # Right Pitch
+    &quot;rr&quot;: (100, 180),  # Right Roll
+    &quot;lp&quot;: (0, 180),    # Left Pitch
+    &quot;lr&quot;: (0, 80),     # Left Roll
+    &quot;b&quot;:  (30, 150),   # Body
+    &quot;h&quot;:  (75, 105),   # Head
+}
+</code></pre>
+<h3>4.3.4 预设动作实现</h3>
+<p>以 <code>hand_action</code> 为例，参数签名与内部逻辑如下：</p>
+<pre><code class="language-python">def hand_action(self, action, hand, steps, speed, amount=30):
+    &quot;&quot;&quot;
+    action: 1=举手, 2=放手, 3=挥手, 4=拍打
+    hand:   1=左手, 2=右手, 3=双手
+    steps:  重复次数
+    speed:  动作速度 (ms)
+    amount: 举手幅度 (10-50)
+    &quot;&quot;&quot;
+    servos = []
+    if hand in [1, 3]: servos.extend(['lp', 'lr'])
+    if hand in [2, 3]: servos.extend(['rp', 'rr'])
+
+    if action == 3:  # 挥手
+        for _ in range(steps):
+            self._move_servos({s: 135 for s in servos}, speed // 2)
+            self._move_servos({s: 90 for s in servos}, speed // 2)
+
+    return {&quot;status&quot;: &quot;ok&quot;}
+</code></pre>
+<h3>4.3.5 振荡模式</h3>
+<p>对齐真机 <code>OscillateServos()</code> 的正弦振荡实现：</p>
+<pre><code class="language-python">def _oscillate(self, amplitudes, centers, period, cycles):
+    sample_interval = 50  # ms，对齐固件 100Hz tick → 50ms
+    total_samples = cycles * period // sample_interval
+
+    for i in range(total_samples):
+        phase = 2 * math.pi * i / (period / sample_interval)
+        targets = centers + amplitudes * math.sin(phase)
+        self._move_servos(targets, sample_interval)
+</code></pre>
+<h2>4.4 本章小结</h2>
+<p>本章完成了 Gymnasium 环境封装与动作系统的实现。与概要设计文档的主要差异：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>设计文档</th>
+<th>实际实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>关节命名</td>
+<td><code>joint_body</code> / <code>joint_head</code> / <code>joint_lp</code> / <code>joint_lr</code></td>
+<td><code>body_joint</code> / <code>head_joint</code> / <code>left_pitch_joint</code> / <code>left_roll_joint</code></td>
+</tr>
+<tr>
+<td>插值方式</td>
+<td>未明确指定</td>
+<td>线性插值（对齐固件 movements.cc:87）</td>
+</tr>
+<tr>
+<td>手臂运动轴</td>
+<td>未具体说明</td>
+<td>左臂 Pitch(Y)、Roll(X) 已验证</td>
+</tr>
+<tr>
+<td>工具总数</td>
+<td>8 个预设</td>
+<td>12 个（含 4 仿真专属）</td>
+</tr>
+</tbody>
+</table>
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>Gymnasium</td><td>OpenAI Gym 继任者，标准 RL 环境接口（reset/step/render/close）。</td></tr>
+    <tr><td>obs_mode</td><td>观测模式枚举，控制 env.step() 返回的观测向量包含哪些传感器数据。</td></tr>
+  </table>
+</div>
+  <div class="code-index">
+  <div class="ci-title">📂 本节涉及的函数 / 类</div>
+  <div class="ci-item"><span class="ci-func">ClampServoTarget()</span></div>
+  <div class="ci-item"><span class="ci-func">OscillateServos()</span></div>
+  <div class="ci-item"><span class="ci-func">_move_servos()</span></div>
+  <div class="ci-item"><span class="ci-func">_oscillate()</span></div>
+  <div class="ci-item"><span class="ci-func">hand_action()</span></div>
+</div>
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 实现逻辑</div>
+  <ol>
+    <li>4.3 动作系统</li>
+    <li>4.4 本章小结</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    <a class="prev" href="../第04章-Gymnasium环境与动作系统/04-01-Gymnasium 环境封装.html">&larr; 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第05章-MCP协议层的实现/05-01-MCP 协议格式.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

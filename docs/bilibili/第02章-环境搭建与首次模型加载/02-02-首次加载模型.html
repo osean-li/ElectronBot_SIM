@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2.3 首次加载模型 · 第 02 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 02 章 · L1 模型描述层  —  子章节 3/21</div>
+    <h1>2.3 首次加载模型</h1>
+    <div class="chap-meta">
+      <span>阅读约 6 分钟</span>
+      <span>1,464 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">MuJoCo Viewer</span><span class="kw">actuator</span><span class="kw">运动学链</span><span class="kw">6关节验证</span><span class="kw">mjData</span><span class="kw">单位缩放</span><span class="kw">qpos</span><span class="kw">ctrl</span></div>
+  </header>
+  <div class="section-background">
+  <div class="bg-title">📖 上下文回顾</div>
+  <div class="bg-body">上一节你搭建好了环境，验证了 MuJoCo 能导入。现在你要<b>真正加载 ElectronBot 的 MJCF 模型</b>——这意味着 MuJoCo 需要解析 electronbot_full_arm.xml 中的 7 个 body（运动学链）、6 个 hinge 关节、6 个 position actuator 和 inline mesh 数据。加载成功后，你会得到一个可拖拽视角的 3D 窗口，右侧 Control 面板的 6 个滑块分别控制机器人的身体、头部、左右臂。本节的核心任务是<b>验证运动学链的完整性</b>：每个关节是否能独立运动、父关节是否带动子关节、外壳零件是否错误地跟随了不该跟随的关节。</div>
+</div>
+  <div class="core-problem"><p><b>⚠️ 视觉比例偏大</b>：首次加载你可能会发现机器人"身高 70 米"。这是因为 CAD 图纸以毫米为单位，而 MuJoCo 默认以米为单位解析 STL 网格——所以模型被放大了 1000 倍。这不影响物理仿真的正确性（质量、惯量、关节力矩都是独立指定的），第三章将详述原因和处理方案。</p></div>
+  <div class="knowledge-card concept">
+  <div class="kc-header">核心概念：6 关节运动学链</div>
+  <div class="kc-body"><p>ElectronBot 的机械结构形成了一条<b>从底座到指尖的树形运动学链</b>：</p><ul><li><b>base_link</b>（固定）→ <b>body_joint</b>（绕 Z 轴旋转 ±90°）→ <b>head_joint</b>（绕 Y 轴俯仰 ±15°）+ <b>left_pitch + left_roll</b>（左臂 2 自由度）+ <b>right_pitch + right_roll</b>（右臂 2 自由度）</li><li>你要验证的关键性质：身体旋转时头部和双臂<b>必须</b>随动（它们挂在 body link 下）；手臂运动时身体侧外壳<b>不能</b>随之转动（外壳挂在 body link 下，不属于 arm link）。</li></ul></div>
+  <div class="kc-tags"><span class="kc-tag">运动学链</span><span class="kc-tag">6关节</span><span class="kc-tag">body_joint</span><span class="kc-tag">随动验证</span></div>
+</div>
+  <main class="content">
+
+<h2>2.3 启动 Viewer，加载模型</h2>
+<p>环境就绪后，一行命令启动 MuJoCo 内置的交互式查看器：</p>
+<pre><code class="language-bash">python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml</code></pre>
+<p>约 2 秒后弹出一个 OpenGL 窗口。你会看到：银色双臂机器人站在棋盘格地面上，蓝色渐变天空背景，右侧是 Control 面板。用鼠标左键拖拽旋转视角，滚轮缩放，中键平移。</p>
+<p><code>electronbot_full_arm.xml</code> 是推荐使用的入口文件——它使用 inline mesh 将所有 STL 网格嵌入 XML 中（~1.7MB 单文件），零外部路径依赖，跨平台无差异。另外两个场景文件 <code>scene_single.xml</code> 和 <code>scene_dual.xml</code> 通过 <code>&lt;include file="electronbot.xml"/&gt;</code> 引入公共模型，用于后续的特定任务（见下一节）。</p>
+
+<h2>2.4 验证 6 个关节——逐项检查运动学链</h2>
+<p>Viewer 右侧 Control 面板的 Actuators 区域列出了 6 个滑块。每个滑块对应 MJCF 中定义的一个 position actuator，它的名字揭示了它所驱动的关节。逐一拖动，按以下标准验证：</p>
+
+<table>
+<tr><th>滑块名称</th><th>MuJoCo 关节</th><th>MCP 代号</th><th>运动轴</th><th>机械范围</th><th>验证要点</th></tr>
+<tr><td><code>act_body</code></td><td>body_joint</td><td><code>b</code></td><td>绕 Z 轴旋转</td><td>±90°</td><td>身体旋转 → 头部+双臂<b>随动</b>；底座不动</td></tr>
+<tr><td><code>act_head</code></td><td>head_joint</td><td><code>h</code></td><td>绕 Y 轴俯仰</td><td>±15°</td><td>头部俯仰 → 双臂<b>不受影响</b></td></tr>
+<tr><td><code>act_right_pitch</code></td><td>right_pitch_joint</td><td><code>rp</code></td><td>绕 Y 轴旋转</td><td>±90°</td><td>右臂前后摆 → 外壳<b>不动</b></td></tr>
+<tr><td><code>act_right_roll</code></td><td>right_roll_joint</td><td><code>rr</code></td><td>绕 X 轴旋转</td><td>±45°</td><td>右臂侧摆 → 外壳<b>不动</b></td></tr>
+<tr><td><code>act_left_pitch</code></td><td>left_pitch_joint</td><td><code>lp</code></td><td>绕 Y 轴旋转</td><td>±90°</td><td>左臂前后摆 → 外壳<b>不动</b></td></tr>
+<tr><td><code>act_left_roll</code></td><td>left_roll_joint</td><td><code>lr</code></td><td>绕 X 轴旋转</td><td>±45°</td><td>左臂侧摆 → 外壳<b>不动</b></td></tr>
+</table>
+
+<p>MCP 代号这列你现在可能觉得多余——但它在第四章和第五章会反复出现。MCP 协议用两字母缩写（<code>rp/rr/lp/lr/b/h</code>）指代 6 个舵机，它们直接映射到 MuJoCo 的 6 个 actuator。这个映射是 Sim2Real 零修改部署的基础——仿真里驱 <code>act_right_pitch</code>，真机上就是给舵机 <code>rp</code> 发 PWM。</p>
+
+<h3>验证步骤（按我实际操作的顺序）</h3>
+<ol>
+<li><b>先拖 act_body</b>：身体绕 Z 轴旋转。如果头部和双臂没有跟着转——说明运动学链的父子关系有 bug，body link 没有正确地作为 head/arm link 的父节点。</li>
+<li><b>再拖 act_right_pitch + act_right_roll</b>：右臂前后/侧向摆动。如果身体侧外壳跟着动了——说明 035/036 零件被错误地归入了 arm 组而非 body 组。这是第三章"零件分组"中最容易犯的错误。</li>
+<li><b>再拖 act_left_pitch + act_left_roll</b>：左臂同样验证。左右臂的零件数量和编号不同（左 6 件，右 7 件），但关节结构和范围完全对称。</li>
+<li><b>最后拖 act_head</b>：头部的俯仰范围只有 ±15°，滑块拖动时动作幅度很小——这是正确的，ElectronBot 原版设计的头部活动范围就是 75°~105°（±15° 相对于中心 90°）。</li>
+<li><b>快速拖动</b>：把滑块快速拖到极限值，观察是否有抖动或 NaN 崩溃。如果没有——说明关节阻尼和 actuator kp/kv 参数在初始值下是稳定的。第三章会详细调优这些参数。</li>
+</ol>
+
+<h3>命令行快速检查（替代 Viewer）</h3>
+<p>如果你在无头服务器上、或者想用脚本自动验证，下面的 Python 代码可以直接读取模型结构并输出关节信息——不需要 GUI：</p>
+<pre><code class="language-python">import mujoco
+model = mujoco.MjModel.from_xml_path("assets/mjcf/electronbot_full_arm.xml")
+print(f"刚体数: {model.nbody}, 关节数: {model.njnt}, 执行器数: {model.nu}")
+for i in range(model.nu):
+    name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
+    jnt_id = model.actuator_trnid[i][0]
+    jnt_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, jnt_id)
+    print(f"  actuator[{i}]={name} → joint={jnt_name}")
+</code></pre>
+<p>输出应确认：7 body、6 joint、6 actuator，且每个 actuator 正确映射到对应的 joint。</p>
+
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>actuator</td><td>MJCF 中的执行器定义，驱动一个关节运动。本项目使用 position actuator（位置控制），kp/kv 参数按舵机规格校准。</td></tr>
+    <tr><td>运动学链</td><td>从固定底座（base_link）到末端（指尖）的 body→joint→body 层级树。父 body 的运动自动传递到子 body。</td></tr>
+    <tr><td>qpos / ctrl</td><td>qpos 是 MuJoCo 的内部关节位置数组（弧度），ctrl 是写入 actuator 的控制信号。Viewer 滑块操作本质上在改 ctrl。</td></tr>
+    <tr><td>单位缩放</td><td>CAD（毫米）→ STL（毫米坐标）→ MuJoCo（默认米），导致视觉放大 1000 倍。不影响物理仿真，因为质量和惯量独立指定。</td></tr>
+  </table>
+</div>
+  <div class="code-index">
+  <div class="ci-title">📂 模型结构与验证脚本</div>
+  <div class="ci-item"><span class="ci-file">assets/mjcf/electronbot_full_arm.xml</span><span class="ci-desc">— inline mesh 版 MJCF，7 body / 6 hinge joint / 6 position actuator</span></div>
+  <div class="ci-item"><span class="ci-file">assets/mjcf/electronbot.xml</span><span class="ci-desc">— 公共模型文件（被 scene 文件 include 引用）</span></div>
+  <div class="ci-item"><span class="ci-file">scripts/validate_model.py</span> · <span class="ci-func">validate_model()</span><span class="ci-desc">— 批量验证刚体/关节/执行器数量与命名</span></div>
+  <div class="ci-item"><span class="ci-func">mujoco.mj_id2name()</span><span class="ci-desc">— MuJoCo C API 的 Python 绑定，按 ID 查询 actuator/joint 名称</span></div>
+</div>
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 验证逻辑</div>
+  <ol>
+    <li><b>加载模型</b>：mjModel.from_xml_path() 解析 MJCF，构建运动学树和物理参数。</li>
+    <li><b>检查运动学链</b>：逐一拖动 6 个 actuator，确认父子 body 的随动关系正确（身体带手臂、手臂不带外壳）。</li>
+    <li><b>验证关节范围</b>：每个关节的机械限位是否与真机设计一致（身体 ±90°、头部 ±15°、手臂 pitch ±90°/roll ±45°）。</li>
+    <li><b>确认无 NaN</b>：快速拖动不引发数值爆炸——说明初始阻尼和 kp/kv 参数稳定。</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    <a class="prev" href="../第02章-环境搭建与首次模型加载/02-01-确认环境依赖.html">&larr; 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第02章-环境搭建与首次模型加载/02-03-场景文件说明.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>

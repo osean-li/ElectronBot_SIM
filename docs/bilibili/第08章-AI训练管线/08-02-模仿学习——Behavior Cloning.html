@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.3 模仿学习——Behavior Cloning · 第 06 章 · ElectronBot-SIM 教学书</title>
+<style>:root{
+  --bg:#ffffff; --paper:#f4f6fa; --ink:#1f2430; --muted:#5b6472;
+  --line:#e6e9ef; --accent:#2f6df0; --accent-soft:#eaf1ff;
+  --code-bg:#f6f8fa; --code-ink:#2b2f36; --callout-bg:#fff7e6;
+  --callout-line:#f5a623; --kw-bg:#eef2f7; --table-head:#f3f6fb;
+  --maxw:860px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.78;font-size:16px;}
+.book-page{max-width:var(--maxw);margin:32px auto 56px;background:var(--bg);
+  padding:46px 54px 38px;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 26px rgba(20,30,60,.07);}
+.chap-header{border-bottom:2px solid var(--accent);padding-bottom:18px;margin-bottom:8px;}
+.chap-kicker{color:var(--accent);font-weight:600;font-size:14px;letter-spacing:.04em;}
+.chap-header h1{font-size:2em;margin:.25em 0 .35em;line-height:1.25;}
+.chap-meta{color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.chap-meta span{background:var(--accent-soft);padding:3px 10px;border-radius:6px;color:#2a4d9b;}
+.keywords{margin-top:12px;}
+.kw-label{display:inline-block;font-weight:600;color:#33405a;margin-right:6px;font-size:13.5px;}
+.kw{display:inline-block;background:var(--kw-bg);border:1px solid var(--line);color:#33405a;
+  padding:3px 11px;border-radius:999px;font-size:13px;margin:4px 5px 0 0;}
+.core-problem{background:var(--callout-bg);border-left:4px solid var(--callout-line);
+  margin:22px 0;padding:12px 18px;border-radius:0 8px 8px 0;color:#6b4e00;font-size:15px;}
+.core-problem b{color:#7a4b00;}
+.content{padding-top:6px;}
+.content h2{margin-top:1.9em;border-bottom:1px solid var(--line);padding-bottom:.32em;font-size:1.42em;}
+.content h3{margin-top:1.5em;font-size:1.18em;color:#283042;}
+.content p{margin:.85em 0;}
+.content ul,.content ol{padding-left:1.5em;}
+.content li{margin:.3em 0;}
+.content code{background:#eef1f5;padding:.12em .42em;border-radius:5px;font-size:.88em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#c7254e;}
+.content pre{background:var(--code-bg);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:8px;padding:14px 16px;overflow:auto;position:relative;}
+.content pre code{background:none;padding:0;color:var(--code-ink);font-size:13.5px;line-height:1.6;}
+.copy-btn{position:absolute;top:8px;right:8px;background:#fff;border:1px solid var(--line);
+  border-radius:6px;font-size:12px;color:var(--muted);cursor:pointer;padding:3px 9px;}
+.copy-btn:hover{color:var(--accent);border-color:var(--accent);}
+.content blockquote{background:#f0f6ff;border-left:4px solid var(--accent);margin:1.3em 0;
+  padding:10px 18px;border-radius:0 8px 8px 0;color:#2a4d9b;}
+.content table{border-collapse:collapse;width:100%;margin:1.3em 0;font-size:14px;}
+.content th,.content td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+.content th{background:var(--table-head);font-weight:600;}
+.content tr:nth-child(even) td{background:#fafbfd;}
+.chap-nav{display:flex;justify-content:space-between;gap:12px;margin-top:42px;padding-top:20px;border-top:1px solid var(--line);}
+.chap-nav a{text-decoration:none;color:var(--accent);background:var(--accent-soft);
+  padding:10px 16px;border-radius:8px;font-size:14px;white-space:nowrap;}
+.chap-nav a:hover{filter:brightness(.97);}
+.sub-toc{margin-top:24px;padding:16px 20px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.sub-toc h3{font-size:1.05em;margin:0 0 10px;color:#33405a;}
+.sub-toc a{display:block;padding:5px 0;color:var(--accent);text-decoration:none;font-size:14.5px;}
+.sub-toc a:hover{text-decoration:underline;}
+.page-footer{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;}
+@media (max-width:680px){.book-page{padding:28px 20px;margin:14px;}.chap-header h1{font-size:1.6em;}}
+.diagram{text-align:center;margin:22px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.diagram figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.diagram svg{max-width:100%;height:auto;}
+/* ---- 知识卡片 ---- */
+.knowledge-card{margin:22px 0;padding:20px 24px;background:#f8fafc;border:1px solid #e0e4eb;border-left:5px solid var(--accent);border-radius:8px;}
+.knowledge-card .kc-header{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+.knowledge-card .kc-body{font-size:14.5px;color:#33405a;line-height:1.7;}
+.knowledge-card .kc-body ul{padding-left:1.3em;margin:.5em 0;}
+.knowledge-card .kc-body li{margin:.25em 0;}
+.knowledge-card .kc-tags{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.knowledge-card .kc-tag{background:var(--accent-soft);color:#2a4d9b;padding:2px 10px;border-radius:999px;font-size:12px;}
+.knowledge-card.concept{border-left-color:#2f6f4f;}
+.knowledge-card.concept .kc-header{color:#2f6f4f;}
+.knowledge-card.concept .kc-tag{background:#e0f2e9;color:#1a5c3a;}
+.knowledge-card.summary{border-left-color:#f5a623;}
+.knowledge-card.summary .kc-header{color:#7a4b00;}
+.knowledge-card.summary .kc-tag{background:#fff7e6;color:#7a5b00;}
+.knowledge-card.extended{border-left-color:var(--muted);}
+.knowledge-card.extended .kc-header{color:#33405a;}
+/* ---- 图表增强 ---- */
+.comparison-table{border-collapse:collapse;width:100%;margin:20px 0;font-size:14px;}
+.comparison-table th{background:var(--table-head);font-weight:600;text-align:left;padding:10px 12px;border:1px solid var(--line);}
+.comparison-table td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;}
+.comparison-table tr:nth-child(even) td{background:#fafbfd;}
+.comparison-table .col-label{font-weight:600;color:#33405a;white-space:nowrap;}
+.flow-diagram{text-align:center;margin:22px 0;padding:16px 10px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.flow-diagram svg{max-width:100%;height:auto;}
+.flow-diagram figcaption{font-size:13px;color:#3a6b4f;margin-top:8px;}
+.data-chart{text-align:center;margin:22px 0;padding:16px 10px;background:#fff7e6;border:1px solid #fce3b0;border-radius:10px;}
+.data-chart svg{max-width:100%;height:auto;}
+.data-chart figcaption{font-size:13px;color:#7a5b00;margin-top:8px;}
+.figure-wrap{text-align:center;margin:24px 0;padding:18px 10px;background:#fafcfe;border:1px solid var(--line);border-radius:10px;}
+.figure-wrap svg{max-width:100%;height:auto;}
+.figure-wrap figcaption{font-size:13px;color:var(--muted);margin-top:10px;}
+.figure-wrap .fig-label{display:inline-block;background:var(--accent-soft);color:#2a4d9b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;margin-right:8px;}
+/* ---- 深度增强：背景块 / 关键词释义 / 代码索引 / 逻辑小结 ---- */
+.section-background{margin:20px 0;padding:18px 22px;background:#f0f6ff;border-left:4px solid var(--accent);border-radius:0 8px 8px 0;}
+.section-background .bg-title{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+.section-background .bg-body{font-size:14.5px;color:#2a4d9b;line-height:1.7;}
+.glossary-section{margin:22px 0;padding:20px 22px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
+.glossary-section .gs-title{font-size:15px;font-weight:700;color:#33405a;margin-bottom:12px;}
+.glossary-table{border-collapse:collapse;width:100%;font-size:14px;}
+.glossary-table td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+.glossary-table td:first-child{font-weight:600;color:var(--accent);white-space:nowrap;width:140px;}
+.glossary-table td:last-child{color:#33405a;}
+.glossary-table tr:last-child td{border-bottom:none;}
+.code-index{margin:22px 0;padding:18px 22px;background:#f6f8fa;border:1px solid var(--line);border-radius:10px;}
+.code-index .ci-title{font-size:14px;font-weight:700;color:#33405a;margin-bottom:10px;}
+.code-index .ci-item{margin:6px 0;font-size:13.5px;padding:4px 0;}
+.code-index .ci-file{font-weight:600;color:#c7254e;}
+.code-index .ci-func{font-weight:600;color:var(--accent);}
+.code-index .ci-desc{color:var(--muted);margin-left:8px;}
+.logic-summary{margin:22px 0;padding:18px 22px;background:#e0f2e9;border:1px solid #c8e0d0;border-radius:10px;}
+.logic-summary .ls-title{font-size:14px;font-weight:700;color:#2f6f4f;margin-bottom:8px;}
+.logic-summary ol{margin:.4em 0;padding-left:1.5em;color:#33405a;}
+.logic-summary li{margin:.35em 0;font-size:14px;}
+@media print{.book-page{box-shadow:none;border:none;margin:0;max-width:100%;}
+  .copy-btn{display:none;}.chap-nav{display:none;}}
+</style>
+</head>
+<body>
+<article class="book-page">
+  <header class="chap-header">
+    <div class="chap-kicker">第 06 章 · L5 传感器 + L6 决策层  —  子章节 18/21</div>
+    <h1>6.3 模仿学习——Behavior Cloning</h1>
+    <div class="chap-meta">
+      <span>阅读约 10 分钟</span>
+      <span>2,443 字</span>
+    </div>
+    <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">传感器</span><span class="kw">Behavior Cloning</span><span class="kw">PPO</span><span class="kw">域随机化</span><span class="kw">Benchmark</span><span class="kw">奖励函数</span><span class="kw">无法超越示范者</span><span class="kw">多模态任务表现差</span></div>
+  </header>
+  <div class="section-background">
+  <div class="bg-title">📖 本节背景</div>
+  <div class="bg-body">python -m src.electronbot_ai.il.collect_demos \ --task wave \ --output demos/wave.hdf5 \ --num_demos 50</div>
+</div>
+  
+  
+  <div class="knowledge-card summary">
+  <div class="kc-header">本节要点</div>
+  <div class="kc-body"><p>python -m src.electronbot_ai.il.collect_demos \</p></div>
+  <div class="kc-tags"><span class="kc-tag">传感器</span><span class="kc-tag">Behavior Cloning</span><span class="kc-tag">PPO</span><span class="kc-tag">域随机化</span></div>
+</div>
+  <figure class="flow-diagram">
+<svg viewBox="0 0 680 130" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ea6" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2f6f4f"/></marker></defs>
+<text x="340" y="22" text-anchor="middle" font-size="14" font-weight="700" fill="#1a5c3a">Behavior Cloning 训练流程</text>
+<rect x="20" y="45" width="130" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="85" y="65" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">录制专家轨迹</text><text x="85" y="81" text-anchor="middle" font-size="10" fill="#3a6b4f">手动操作 12 动作</text>
+<line x1="150" y1="67" x2="178" y2="67" stroke="#2f6f4f" stroke-width="2" marker-end="url(#ea6)"/>
+<rect x="180" y="45" width="130" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="245" y="65" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">构建数据集</text><text x="245" y="81" text-anchor="middle" font-size="10" fill="#3a6b4f">(obs, action) pairs</text>
+<line x1="310" y1="67" x2="338" y2="67" stroke="#2f6f4f" stroke-width="2" marker-end="url(#ea6)"/>
+<rect x="340" y="45" width="130" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="405" y="65" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">监督学习训练</text><text x="405" y="81" text-anchor="middle" font-size="10" fill="#3a6b4f">MSE Loss · 50 epochs</text>
+<line x1="470" y1="67" x2="498" y2="67" stroke="#2f6f4f" stroke-width="2" marker-end="url(#ea6)"/>
+<rect x="500" y="45" width="150" height="44" rx="8" fill="#e0f2e9" stroke="#2f6f4f" stroke-width="1.5"/><text x="575" y="65" text-anchor="middle" font-size="12" font-weight="600" fill="#1a5c3a">导出 BC 策略</text><text x="575" y="81" text-anchor="middle" font-size="10" fill="#3a6b4f">.pt 权重文件</text>
+</svg><figcaption>BC 训练的四个阶段：数据收集 → 数据集构建 → 训练 → 导出</figcaption></figure>
+  <main class="content">
+<h2>6.3 模仿学习——Behavior Cloning</h2>
+<h3>6.3.1 数据采集</h3>
+<pre><code class="language-bash">python -m src.electronbot_ai.il.collect_demos \
+    --task wave \
+    --output demos/wave.hdf5 \
+    --num_demos 50
+</code></pre>
+<p>每条演示记录在 HDF5 文件中，包含观测序列（joint_pos、可选图像）与动作序列（6 维角度增量）。数据格式兼容 robomimic 标准。</p>
+<h3>6.3.2 BC 策略训练</h3>
+<p>策略网络为一个 2 层 MLP：</p>
+<pre><code class="language-python">class BCPolicy(nn.Module):
+    def __init__(self, obs_dim=6, action_dim=6):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, 128), nn.ReLU(),
+            nn.Linear(128, 128), nn.ReLU(),
+            nn.Linear(128, action_dim), nn.Tanh(),
+        )
+</code></pre>
+<p>训练采用 MSE 损失 + Adam 优化器：</p>
+<pre><code class="language-python">dataset = HDF5Dataset(&quot;demos/wave.hdf5&quot;)
+loader = DataLoader(dataset, batch_size=64, shuffle=True)
+policy = BCPolicy()
+optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+
+for epoch in range(200):
+    for obs, action in loader:
+        pred = policy(obs)
+        loss = F.mse_loss(pred, action)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+</code></pre>
+<p>200 epoch 训练在 RTX 2060 上约 3-5 分钟收敛。训练后的策略可控制机器人完成基本挥手动作。</p>
+<h3>6.3.3 BC 的局限</h3>
+<ol>
+<li>
+<p><strong>分布偏移（Distribution Shift）</strong>：策略执行中的微小偏差会随时间累积，导致状态分布偏离训练数据分布。</p>
+</li>
+<li>
+<p><strong>无法超越示范者</strong>：BC 本质是复制，策略性能受限于演示数据质量。</p>
+</li>
+<li>
+<p><strong>多模态任务表现差</strong>：如抓取任务有多种可行方式，BC 会在各方式间"平均"，产生模糊动作。</p>
+</li>
+</ol>
+<p>BC 适合原型验证（半天出结果），但不适合复杂任务。</p>
+<h2>6.4 强化学习——PPO</h2>
+<h3>6.4.1 奖励函数设计</h3>
+<p>以 <code>reach</code> 任务为例，奖励函数包含密集奖励与稀疏奖励两部分：</p>
+<pre><code class="language-python">class ReachTask(TaskBase):
+    def compute_reward(self, env):
+        ee_pos = env.data.body(&quot;left_hand&quot;).xpos
+        distance = np.linalg.norm(ee_pos - self.target_pos)
+
+        reward = -distance * 10.0        # 密集奖励：越近越好
+
+        if distance &lt; 0.01:              # 到达阈值 10mm
+            reward += 10.0               # 稀疏奖励：到达大幅加分
+
+        return reward
+</code></pre>
+<h3>6.4.2 PPO 训练</h3>
+<pre><code class="language-bash">python -m src.electronbot_ai.rl.train_ppo \
+    --task reach \
+    --total-timesteps 2000000 \
+    --num-envs 16
+</code></pre>
+<p>训练过程观察（TensorBoard）：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">步数</th>
+<th>现象</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">0</td>
+<td>奖励 ≈ 0，策略完全随机抖动</td>
+</tr>
+<tr>
+<td style="text-align: center;">300k</td>
+<td>奖励明显上升，策略找到"接近目标"的方向</td>
+</tr>
+<tr>
+<td style="text-align: center;">700k</td>
+<td>奖励收敛，成功率 &gt; 80%</td>
+</tr>
+<tr>
+<td style="text-align: center;">2M</td>
+<td>最终成功率 ≈ 95%</td>
+</tr>
+</tbody>
+</table>
+<h3>6.4.3 并行环境加速</h3>
+<p>PPO 训练需要大量交互数据。采用 <code>SubprocVecEnv</code> 并行 16 个 MuJoCo 环境：</p>
+<pre><code class="language-python">from stable_baselines3.common.vec_env import SubprocVecEnv
+
+def make_env(rank):
+    def _init():
+        env = ElectronBotEnv(render_mode=&quot;rgb_array&quot;)
+        env.seed(rank)
+        return env
+    return _init
+
+env = SubprocVecEnv([make_env(i) for i in range(16)])
+</code></pre>
+<p>RTX 2060 12GB 可运行 16-32 个并行环境。训练速度相比单环境提升约 16 倍。</p>
+  </main>
+  <div class="glossary-section">
+  <div class="gs-title">🔑 关键词释义</div>
+  <table class="glossary-table">
+    <tr><td>Behavior Cloning</td><td>行为克隆：从专家演示数据中监督学习策略的模仿学习方法。</td></tr>
+    <tr><td>PPO</td><td>Proximal Policy Optimization，一种稳定高效的策略梯度强化学习算法。</td></tr>
+  </table>
+</div>
+  <div class="code-index">
+  <div class="ci-title">📂 本节涉及的函数 / 类</div>
+  <div class="ci-item"><span class="ci-func">BCPolicy()</span></div>
+  <div class="ci-item"><span class="ci-func">ReachTask()</span></div>
+  <div class="ci-item"><span class="ci-func">__init__()</span></div>
+  <div class="ci-item"><span class="ci-func">_init()</span></div>
+  <div class="ci-item"><span class="ci-func">compute_reward()</span></div>
+  <div class="ci-item"><span class="ci-func">make_env()</span></div>
+</div>
+  <div class="logic-summary">
+  <div class="ls-title">⚙️ 实现逻辑</div>
+  <ol>
+    <li>6.3 模仿学习——Behavior Cloning</li>
+    <li>6.4 强化学习——PPO</li>
+  </ol>
+</div>
+  <nav class="chap-nav">
+    <a class="prev" href="../第06章-AI训练管线的实现/06-01-传感器模块.html">&larr; 上一节</a>
+    <a class="home" href="../index.html">目录</a>
+    <a class="next" href="../第06章-AI训练管线的实现/06-03-域随机化.html">下一节 &rarr;</a>
+  </nav>
+  <footer class="page-footer">ElectronBot-SIM 教学书 · 从 CAD &rarr; 仿真 &rarr; AI &rarr; 真机 的全链路工程笔记</footer>
+</article>
+<script>
+document.querySelectorAll('.content pre').forEach(function(pre){
+  var btn=document.createElement('button');btn.className='copy-btn';btn.textContent='复制';
+  btn.onclick=function(){navigator.clipboard.writeText(pre.innerText);btn.textContent='已复制';setTimeout(function(){btn.textContent='复制';},1200);};
+  pre.appendChild(btn);
+});
+</script>
+</body>
+</html>
