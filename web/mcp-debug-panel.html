@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ElectronBot MCP 调试面板</title>
+<style>
+  :root {
+    --bg: #f0f2f5; --panel: #ffffff; --border: #d9dde3; --text: #2c3e50;
+    --accent: #4a7cf7; --accent-hover: #3b6ae0; --green: #34b85b; --red: #e74c3c;
+    --yellow: #f0a030; --dim: #9098a6; --radius: 8px;
+    --left-w: 520px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
+  .layout { display: flex; height: 100vh; }
+
+  /* ====== Left Panel ====== */
+  .controls { width: var(--left-w); min-width: 360px; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; background: #f7f8fa; }
+  .conn-bar { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .conn-bar input { flex: 1; min-width: 0; background: #fff; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: var(--radius); font-size: 13px; }
+  .conn-bar input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(74,124,247,0.15); }
+  .btn { padding: 6px 14px; border: none; border-radius: var(--radius); cursor: pointer; font-size: 13px; font-weight: 600; transition: .15s; white-space: nowrap; }
+  .btn-connect { background: var(--accent); color: #fff; }
+  .btn-connect:hover { background: var(--accent-hover); }
+  .btn-disconnect { background: var(--red); color: #fff; }
+  .btn-disconnect:hover { opacity: 0.85; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.off { background: var(--dim); }
+  .status-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.err { background: var(--red); }
+  #connText { font-size:11px; color:var(--dim); white-space:nowrap; }
+
+  .tool-list { flex: 1; overflow-y: auto; padding: 10px 14px 14px; }
+  .section { margin-bottom: 6px; }
+  .section-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--panel); border-radius: var(--radius); cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; margin-bottom: 6px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .section-header:hover { border-color: var(--accent); background: #eef3ff; }
+  .section-header .arrow { font-size: 10px; transition: transform .2s; color: var(--dim); }
+  .section-header .arrow.open { transform: rotate(90deg); color: var(--accent); }
+  .section-header .count { font-size: 11px; color: var(--dim); margin-left: auto; font-weight: 500; }
+  .section-body { display: none; padding: 4px 0; }
+  .section-body.open { display: block; }
+
+  .tool-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; min-height: 80px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .tool-card:hover { border-color: var(--accent); background: #fcfdff; box-shadow: 0 2px 6px rgba(74,124,247,0.1); }
+  .tool-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .tool-card-name { font-size: 13px; font-weight: 600; color: #1e3a6e; flex: 1; line-height: 1.3; }
+  .tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 700; line-height: 1.5; flex-shrink: 0; }
+  .tag-sim { background: #ede9fe; color: #6d28d9; }
+  .tag-real { background: #dcfce7; color: #166534; }
+  .tag-query { background: #f1f5f9; color: #64748b; }
+
+  .json-preview { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 5px; padding: 6px 10px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 11px; color: var(--dim); height: 26px; line-height: 14px; overflow: hidden; cursor: pointer; transition: .15s; margin-bottom: 10px; white-space: nowrap; text-overflow: ellipsis; }
+  .json-preview:hover { color: #334155; border-color: #cbd5e1; }
+  .json-preview.expanded { height: auto; color: #1e293b; white-space: pre-wrap; word-break: break-all; padding: 10px; }
+
+  .btn-send { background: var(--accent); color: #fff; font-size: 13px; padding: 7px 0; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; transition: .15s; width: 100%; display: block; }
+  .btn-send:hover { background: var(--accent-hover); }
+  .btn-send:disabled { background: #cbd5e1; cursor: not-allowed; color: #94a3b8; }
+
+  /* ====== Resize Handle ====== */
+  .resize-handle { width: 6px; cursor: col-resize; background: transparent; flex-shrink: 0; transition: background .2s; position: relative; }
+  .resize-handle:hover, .resize-handle.active { background: var(--accent); }
+  .resize-handle::after { content: ''; position: absolute; left: -4px; right: -4px; top: 0; bottom: 0; }
+
+  /* ====== Right Panel ====== */
+  .log-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 360px; background: var(--panel); }
+  .log-header { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
+  .btn-clear { background: transparent; border: 1px solid var(--border); color: var(--dim); font-size: 11px; padding: 3px 10px; cursor: pointer; border-radius: 4px; }
+  .btn-clear:hover { color: var(--text); border-color: var(--text); }
+  .log-body { flex: 1; overflow-y: auto; padding: 12px 16px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 12px; line-height: 1.5; background: #fafbfc; }
+  .log-body::-webkit-scrollbar { width: 5px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .log-entry { margin-bottom: 10px; }
+  .log-entry .meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .log-entry .meta .time { font-size: 11px; color: var(--dim); }
+  .log-entry .meta .label { font-size: 11px; font-weight: 700; }
+  .log-entry.request .label { color: var(--accent); }
+  .log-entry.response .label { color: var(--green); }
+  .log-entry.error .label { color: var(--red); }
+  .log-entry .content { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; white-space: pre-wrap; word-break: break-all; font-size: 12px; line-height: 1.5; border-left: 3px solid var(--dim); }
+  .log-entry.request .content { border-left-color: var(--accent); }
+  .log-entry.response .content { border-left-color: var(--green); }
+  .log-entry.error .content { border-left-color: var(--red); }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- LEFT: Controls -->
+  <div class="controls" id="leftPanel">
+    <div class="conn-bar">
+      <div class="status-dot off" id="statusDot"></div>
+      <input id="wsUrl" value="ws://localhost:8080/ws" placeholder="ws://localhost:8080/ws">
+      <button class="btn btn-connect" id="btnConn" onclick="toggleConnection()">连接</button>
+      <span id="connText">未连接</span>
+    </div>
+    <div class="tool-list" id="toolList"></div>
+  </div>
+
+  <!-- Resize handle -->
+  <div class="resize-handle" id="resizeHandle"></div>
+
+  <!-- RIGHT: Log -->
+  <div class="log-panel">
+    <div class="log-header">
+      <span>📋 请求 / 响应日志</span>
+      <button class="btn-clear" onclick="clearLog()">清空</button>
+    </div>
+    <div class="log-body" id="logBody">
+      <div style="color:var(--dim);padding:60px 40px;text-align:center;font-size:14px;line-height:1.8;">
+        WebSocket 连接后，点击左侧按钮发送指令<br>
+        每次请求和响应会实时显示在这里
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   TOOL DEFINITIONS
+   ============================================================ */
+const TOOLS = [
+  { section: '🎬 预设动作', count:6, tools: [
+    { name:'self.electron.hand_action', label:'🖐 举手', tag:'real', json:{action:1,hand:3,steps:2,speed:800} },
+    { name:'self.electron.hand_action', label:'🖐 放手', tag:'real', json:{action:2,hand:3,steps:2,speed:800} },
+    { name:'self.electron.hand_action', label:'👋 挥手', tag:'real', json:{action:3,hand:3,steps:2,speed:600} },
+    { name:'self.electron.hand_action', label:'👏 拍打', tag:'real', json:{action:4,hand:3,steps:2,speed:600} },
+    { name:'self.electron.hand_action', label:'👈 左手举手', tag:'real', json:{action:1,hand:1,steps:2,speed:800} },
+    { name:'self.electron.hand_action', label:'👉 右手举手', tag:'real', json:{action:1,hand:2,steps:2,speed:800} },
+  ]},
+  { section: '🧍 身体/头部', count:7, tools: [
+    { name:'self.electron.body_turn', label:'⬅️ 左转 45°', tag:'real', json:{direction:1,angle:45,speed:1000} },
+    { name:'self.electron.body_turn', label:'➡️ 右转 45°', tag:'real', json:{direction:2,angle:45,speed:1000} },
+    { name:'self.electron.body_turn', label:'🔙 回正', tag:'real', json:{direction:3} },
+    { name:'self.electron.head_move', label:'🔝 抬头', tag:'real', json:{action:1,angle:10,speed:300} },
+    { name:'self.electron.head_move', label:'🔽 低头', tag:'real', json:{action:2,angle:10,speed:300} },
+    { name:'self.electron.head_move', label:'🙂 点头', tag:'real', json:{action:3,angle:8,speed:400} },
+    { name:'self.electron.head_move', label:'🔙 回中', tag:'real', json:{action:4} },
+  ]},
+  { section: '⚙️ 舵机控制 @sim_only', count:6, tools: [
+    { name:'self.electron.servo_move', label:'RP(rp)→90°', tag:'sim', json:{servo_type:'rp',position:90,speed:1000} },
+    { name:'self.electron.servo_move', label:'RR(rr)→140°', tag:'sim', json:{servo_type:'rr',position:140,speed:1000} },
+    { name:'self.electron.servo_move', label:'LP(lp)→90°', tag:'sim', json:{servo_type:'lp',position:90,speed:1000} },
+    { name:'self.electron.servo_move', label:'LR(lr)→40°', tag:'sim', json:{servo_type:'lr',position:40,speed:1000} },
+    { name:'self.electron.servo_move', label:'Body(b)→60°', tag:'sim', json:{servo_type:'b',position:60,speed:1000} },
+    { name:'self.electron.servo_move', label:'Head(h)→100°', tag:'sim', json:{servo_type:'h',position:100,speed:500} },
+  ]},
+  { section: '🎞️ 序列动作 @sim_only', count:3, tools: [
+    { name:'self.electron.servo_sequences', label:'右臂振荡', tag:'sim', json:{sequence:'{"a":[{"osc":{"a":{"rr":30},"o":{"rr":140},"p":500,"c":3}}]}'} },
+    { name:'self.electron.servo_sequences', label:'双臂振荡', tag:'sim', json:{sequence:'{"a":[{"osc":{"a":{"rp":20,"lp":20},"o":{"rp":120,"lp":60},"p":400,"c":2}}]}'} },
+    { name:'self.electron.servo_sequences', label:'移动→振荡→回位', tag:'sim', json:{sequence:'{"a":[{"s":{"rp":120,"lp":60},"v":800,"d":200},{"osc":{"a":{"rp":20,"lp":20},"o":{"rp":120,"lp":60},"p":400,"c":2}},{"s":{"rp":180,"lp":0},"v":800}]}'} },
+  ]},
+  { section: '🖥️ 系统 / 查询', count:6, tools: [
+    { name:'self.electron.home', label:'🏠 Home', tag:'sim', json:{} },
+    { name:'self.electron.stop', label:'🛑 Stop', tag:'real', json:{} },
+    { name:'self.electron.get_status', label:'📊 状态', tag:'query', json:{} },
+    { name:'self.electron.get_trims', label:'📐 Trim', tag:'query', json:{} },
+    { name:'self.battery.get_level', label:'🔋 电池', tag:'query', json:{} },
+    { name:'self.electron.get_ip', label:'🌐 IP', tag:'sim', json:{} },
+  ]},
+];
+
+/* ============================================================
+   Helpers
+   ============================================================ */
+function buildReq(toolName, args) {
+  return { type:'mcp', payload:{ jsonrpc:'2.0', method:'tools/call', params:{ name:toolName, arguments:args }, id:Date.now()%10000 } };
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function $ (id) { return document.getElementById(id); }
+
+/* ============================================================
+   WebSocket
+   ============================================================ */
+let ws = null;
+function setStatus(state) {
+  const dot = $('statusDot'), txt = $('connText'), btn = $('btnConn');
+  dot.className = 'status-dot ' + state;
+  if (state === 'on')  { txt.textContent = '已连接'; btn.textContent='断开'; btn.className='btn btn-disconnect'; }
+  if (state === 'off') { txt.textContent = '未连接'; btn.textContent='连接'; btn.className='btn btn-connect'; }
+  if (state === 'err') { txt.textContent = '连接失败'; btn.textContent='重连'; btn.className='btn btn-connect'; }
+  document.querySelectorAll('.btn-send').forEach(b => b.disabled = state !== 'on');
+}
+
+function toggleConnection() {
+  if (ws && ws.readyState === WebSocket.OPEN) { ws.close(); return; }
+  const url = $('wsUrl').value.trim() || 'ws://localhost:8080/ws';
+  try { ws = new WebSocket(url); } catch(e) { setStatus('err'); addLog('error','连接失败',String(e)); return; }
+  ws.onopen = () => { setStatus('on'); addLog('response','🟢 已连接',url); };
+  ws.onclose = () => { setStatus('off'); addLog('response','🔴 已断开',''); };
+  ws.onerror = () => { setStatus('err'); addLog('error','连接错误','请确认 python -m electronbot_sim.mcp_server 已启动'); };
+  ws.onmessage = e => {
+    try { addLog('response','📥 响应', JSON.stringify(JSON.parse(e.data),null,2)); }
+    catch(_) { addLog('response','📥 响应', e.data); }
+  };
+}
+
+function sendTool(toolName, args) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) { addLog('error','未连接','请先点击"连接"按钮'); return; }
+  const req = buildReq(toolName, args);
+  ws.send(JSON.stringify(req));
+  addLog('request', `📤 ${toolName}`, JSON.stringify(req,null,2));
+}
+
+/* ============================================================
+   Log
+   ============================================================ */
+function addLog(type, label, text) {
+  const el = document.createElement('div');
+  el.className = 'log-entry ' + type;
+  const t = new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  el.innerHTML = `<div class="meta"><span class="time">${t}</span><span class="label">${label}</span></div><div class="content">${esc(text)}</div>`;
+  const body = $('logBody');
+  const ph = body.querySelector(':scope > div[style]');
+  if (ph) ph.remove();
+  body.appendChild(el);
+  body.scrollTop = body.scrollHeight;
+}
+function clearLog() { $('logBody').innerHTML = '<div style="color:var(--dim);padding:60px 40px;text-align:center;font-size:14px;line-height:1.8;">日志已清空</div>'; }
+
+/* ============================================================
+   Build UI
+   ============================================================ */
+function buildUI() {
+  const container = $('toolList');
+  TOOLS.forEach((section, si) => {
+    const secDiv = document.createElement('div');
+    secDiv.className = 'section';
+    const bodyId = `sec-${si}`;
+    secDiv.innerHTML = `<div class="section-header" data-section="${bodyId}">
+      <span class="arrow">▶</span><span>${section.section}</span><span class="count">${section.count}个</span></div>
+      <div class="section-body" id="${bodyId}"></div>`;
+    container.appendChild(secDiv);
+    const body = secDiv.querySelector('.section-body');
+
+    section.tools.forEach(t => {
+      const req = buildReq(t.name, t.json || {});
+      const jsonStr = JSON.stringify(req);
+      const tagClass = 'tag-' + (t.tag==='sim'?'sim':t.tag==='query'?'query':'real');
+      const tagLabel = t.tag==='sim'?'@SIM':t.tag==='query'?'QUERY':'REAL';
+
+      const card = document.createElement('div');
+      card.className = 'tool-card';
+      card.innerHTML = `<div class="tool-card-header"><span class="tool-card-name">${t.label}</span><span class="tag ${tagClass}">${tagLabel}</span></div>
+        <div class="json-preview" title="点击展开完整 JSON" data-expand>${esc(jsonStr)}</div>
+        <button class="btn btn-send" disabled data-name="${esc(t.name)}" data-args='${JSON.stringify(t.json||{})}'>▶ 发送</button>`;
+      body.appendChild(card);
+    });
+  });
+  // first section open
+  toggleBody('sec-0', container.querySelector('.section-header'));
+}
+
+// delegated event handlers
+$('toolList').addEventListener('click', e => {
+  // section toggle
+  if (e.target.closest('.section-header')) {
+    const hdr = e.target.closest('.section-header');
+    const bodyId = hdr.dataset.section;
+    toggleBody(bodyId, hdr);
+    return;
+  }
+  // json preview expand
+  if (e.target.dataset.expand !== undefined) {
+    e.target.classList.toggle('expanded');
+    return;
+  }
+  // send button
+  const btn = e.target.closest('.btn-send');
+  if (btn) {
+    const name = btn.dataset.name;
+    const args = JSON.parse(btn.dataset.args);
+    sendTool(name, args);
+  }
+});
+
+function toggleBody(id, header) {
+  const body = document.getElementById(id);
+  body.classList.toggle('open');
+  header.querySelector('.arrow').classList.toggle('open');
+}
+buildUI();
+
+/* ============================================================
+   Resize
+   ============================================================ */
+(function() {
+  const handle = $('resizeHandle'), left = $('leftPanel');
+  let dragging = false, startX = 0, startW = 0;
+  handle.addEventListener('mousedown', e => {
+    dragging = true; handle.classList.add('active');
+    startX = e.clientX; startW = left.offsetWidth;
+    document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const w = Math.max(320, Math.min(800, startW + e.clientX - startX));
+    left.style.width = w + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false; handle.classList.remove('active');
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+  });
+})();
+</script>
+</body>
+</html>

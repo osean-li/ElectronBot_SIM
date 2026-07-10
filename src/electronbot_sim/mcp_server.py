@@ -80,6 +80,8 @@ class McpWebSocketServer:
         try:
             msg = json.loads(raw_msg)
         except json.JSONDecodeError as e:
+            print(f"❌ JSON 解析失败: {e}")
+            print(f"   原始数据: {raw_msg[:200]}")
             await websocket.send(json.dumps({
                 "jsonrpc": "2.0", "id": None,
                 "error": {"code": -32700, "message": f"JSON 解析失败: {e}"},
@@ -94,14 +96,46 @@ class McpWebSocketServer:
         else:
             payload = msg
 
+        # 打印接收到的请求
+        method = payload.get("method", "?")
+        tool_name = ""
+        tool_args = {}
+        if method == "tools/call":
+            tool_name = payload.get("params", {}).get("name", "?")
+            tool_args = payload.get("params", {}).get("arguments", {})
+        elif method == "tools/list":
+            tool_name = "[tools/list]"
+        else:
+            tool_name = method
+            tool_args = payload.get("params", {})
+
+        print(f"📥 收到请求: {tool_name}")
+        if tool_args:
+            print(f"   参数: {tool_args}")
+
         # 转发给 McpSimBridge
         response = self.bridge.handle_request(payload)
+
+        # 打印响应摘要
+        if "error" in response:
+            print(f"   ❌ 错误: {response['error'].get('message', str(response['error']))}")
+        else:
+            result = response.get("result", {})
+            content = result.get("content", [{}])
+            text = content[0].get("text", "") if content else ""
+            print(f"   ✅ 响应: {text[:120]}")
 
         # 如果是封装格式, 响应也封装
         if wrapped:
             response = {"type": "mcp", "payload": response}
 
         await websocket.send(json.dumps(response, ensure_ascii=False))
+
+    async def _process_request(self, connection, request):
+        """预处理连接请求 — 静默拒绝非 WebSocket 连接（如浏览器 HTTP 请求）."""
+        if request.headers.get("Upgrade", "").lower() != "websocket":
+            return connection.respond(426, "WebSocket connection required")
+        return None  # 允许 WebSocket 连接继续
 
     async def start(self) -> None:
         """启动 WebSocket 服务器 (阻塞, 直到被取消)."""
@@ -112,11 +146,18 @@ class McpWebSocketServer:
                 "未安装 websockets 库, 请运行: pip install websockets"
             ) from e
 
+        print(f"🔌 ElectronBot 仿真 MCP 服务器已启动 (调试模式)")
+        print(f"   ws://{self.host}:{self.port}/ws")
+        print(f"   ⚠️ 此服务器仅用于仿真调试，不用于真机连接")
+        print(f"   真机部署请使用: ElectronBotBackend('cloud', ...)")
+        print(f"   ───")
         logger.info("启动 MCP WebSocket 调试服务器: ws://%s:%d", self.host, self.port)
-        logger.info("⚠️  仅用于仿真调试, 真机 release v2.2.6 无此端点")
 
-        async with websockets.serve(self.handler, self.host, self.port):
-            await asyncio.Future()  # 永久运行, 直到被取消
+        self._server = await websockets.serve(
+            self.handler, self.host, self.port,
+            process_request=self._process_request,
+        )
+        await self._server.wait_closed()
 
     def start_sync(self) -> None:
         """同步启动 (阻塞主线程)."""
@@ -137,21 +178,56 @@ class McpWebSocketServer:
 
 
 def run_server(host: str = "localhost", port: int = 8080,
-               render_mode: Optional[str] = None) -> None:
+               render_mode: Optional[str] = "human") -> None:
     """便捷启动函数.
 
     参数:
         host:        监听地址
         port:        监听端口
-        render_mode: 渲染模式, None / "human" / "rgb_array"
+        render_mode: 渲染模式, "human" (默认) / "rgb_array" / None
     """
+    import socket
+
+    # ── 预检端口可用性, 避免创建 MuJoCo/GLFW 资源后再发现端口被占用 ──
+    # (一旦创建 launch_passive viewer, 后台 GLFW 线程很难干净清理, 会段错误)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+    except OSError:
+        print(f"❌ 端口 {port} 已被占用, 请先关闭占用该端口的进程:")
+        print(f"   lsof -i :{port}")
+        print(f"   或 kill $(lsof -t -i :{port})")
+        return
+    finally:
+        sock.close()
+
     from .env import ElectronBotEnv
     from .mcp_bridge import McpSimBridge
 
-    env = ElectronBotEnv(render_mode=render_mode)
-    bridge = McpSimBridge(env)
-    server = McpWebSocketServer(bridge, host=host, port=port)
-    asyncio.run(server.start())
+    env = None
+    try:
+        # MCP 调试服务器: 使用项目主场景 electronbot_scene.xml (含机器人本体 + 地面 + 灯光)
+        # env.py 默认的 scene_tabletop.xml 是桌面抓取任务场景, MCP 调试不需要桌面/物体
+        env = ElectronBotEnv(render_mode=render_mode, model_file="electronbot_scene.xml")
+        # 主动触发一次渲染, 确保 MuJoCo 窗口在 WebSocket 监听前弹出
+        # (human 模式下创建 launch_passive viewer, 显示 home 姿态)
+        env.render()
+        bridge = McpSimBridge(env)
+        server = McpWebSocketServer(bridge, host=host, port=port)
+        asyncio.run(server.start())
+    except OSError as e:
+        if e.errno == 98:  # EADDRINUSE (预检后仍可能被抢占)
+            print(f"❌ 端口 {port} 已被占用, 请先关闭占用该端口的进程:")
+            print(f"   lsof -i :{port}")
+            print(f"   或 kill $(lsof -t -i :{port})")
+        else:
+            print(f"❌ 系统错误: {e}")
+    except KeyboardInterrupt:
+        print("\n⏹ 服务器已停止 (Ctrl+C)")
+    finally:
+        if env is not None:
+            env.close()
 
 
 if __name__ == "__main__":
@@ -159,6 +235,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ElectronBot MCP WebSocket 调试服务器")
     parser.add_argument("--host", default="localhost", help="监听地址")
     parser.add_argument("--port", type=int, default=8080, help="监听端口")
-    parser.add_argument("--render", default=None, help="渲染模式: human / rgb_array")
+    parser.add_argument("--render", default="human", help="渲染模式: human (默认) / rgb_array")
     args = parser.parse_args()
     run_server(args.host, args.port, args.render)

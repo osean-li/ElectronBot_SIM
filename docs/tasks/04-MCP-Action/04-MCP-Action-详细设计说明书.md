@@ -16,9 +16,14 @@
 > - `src/electronbot_sim/backend.py` —— 统一 Backend API（sim/cloud/ws 三模式）
 > - `src/electronbot_sim/actions/` —— 动作系统模块
 
-**文档版本**: v2.1  
-**最后更新**: 2026-07-08  
-**变更类型**: 重编号 Phase 3→4，新增真机验证前提
+**文档版本**: v2.3  
+**最后更新**: 2026-07-10  
+**变更类型**: 修正 `build_electronbot_xml.py` 模型组装逻辑，使 base/body/head/arms 相邻 mesh 边界框相接；v2.2 内容保持不变
+
+> **文档版本**: v2.2  
+> **最后更新**: 2026-07-09  
+> **变更类型**: Web 调试面板集成 + 仿真端验证通过（#1~#11 ✅）；修复 3 个关键 Bug（关节命名/舵机截断/HTML 引号冲突）
+> **变更类型**: 重编号 Phase 3→4，新增真机验证前提
 >
 > **文档版本**: v2.0  
 > **最后更新**: 2026-07-08  
@@ -262,494 +267,94 @@ backend.call("self.electron.home", {})  # 完全相同的调用
 
 ### 2.1 MCP Bridge 类
 
-```python
-# src/electronbot_sim/mcp_bridge.py
+**文件**: `src/electronbot_sim/mcp_bridge.py`
 
-import json
-import numpy as np
-from typing import Any, Dict, Optional
+**职责**: 仿真端 MCP 工具注册与舵机↔关节转换，与真机 xiaozhi-esp32 McpServer 实现同构。
 
-class McpSimBridge:
-    """
-    仿真端 MCP 服务器
-    ——与真机 xiaozhi-esp32 McpServer 实现同构的工具注册
-    """
-    
-    def __init__(self, env: "ElectronBotEnv"):
-        self.env = env
-        
-        # ── 舵机角度 → MuJoCo 关节角度转换 ──
-        # 这些数值来自 Phase 1 的分析
-        self._servo_centers = np.array([180, 140, 0, 40, 90, 90])    # 舵机中心
-        self._servo_ratios = np.array([1.0, 1.125, 1.0, 1.125, 1.5, 2.0])  # 映射比
-        self._servo_directions = np.array([-1, -1, 1, 1, 1, 1])      # 方向
-        
-        # ── 注册工具映射表 ──
-        # 工具可用范围:
-        #   真机可用 (8个): hand_action, body_turn, head_move, stop,
-        #                   get_status, set_trim, get_trims, battery.get_level
-        #   @sim_only (4个): servo_move, servo_sequences, home, get_ip
-        #                    ⚠️ 这4个在真机 release v2.2.6 上不可用，需固件 OTA
-        self._tool_registry = {
-            "self.electron.servo_move":          self._servo_move,          # @sim_only
-            "self.electron.servo_sequences":     self._servo_sequences,     # @sim_only
-            "self.electron.hand_action":         self._hand_action,
-            "self.electron.body_turn":           self._body_turn,
-            "self.electron.head_move":           self._head_move,
-            "self.electron.home":                self._home,                # @sim_only
-            "self.electron.stop":                self._stop,
-            "self.electron.get_status":          self._get_status,
-            "self.electron.set_trim":            self._set_trim,
-            "self.electron.get_trims":           self._get_trims,
-            "self.battery.get_level":            self._battery_level,
-            "self.electron.get_ip":              self._get_ip,              # @sim_only
-        }
-        
-        # ── 动作队列中的状态 ──
-        self._is_moving = False
-        self._trims = np.zeros(6, dtype=int)
-    
-    # ========== 核心：舵机↔关节转换 ==========
-    
-    def _servo_to_joint(self, servo_index: int, servo_angle: float) -> float:
-        """舵机角度 → MuJoCo 机械关节角度 (度)"""
-        offset = servo_angle - self._servo_centers[servo_index]
-        ratio = self._servo_ratios[servo_index]
-        direction = self._servo_directions[servo_index]
-        return offset * ratio * direction
-    
-    def _joint_to_servo(self, servo_index: int, joint_angle: float) -> float:
-        """MuJoCo 机械关节角度 → 舵机角度 (度)"""
-        ratio = self._servo_ratios[servo_index]
-        direction = self._servo_directions[servo_index]
-        ratio = ratio * direction if ratio != 0 else 1
-        return joint_angle / ratio + self._servo_centers[servo_index]
-    
-    # ========== 工具实现 ==========
-    
-    def _servo_index_from_name(self, servo_type: str) -> int:
-        """servo_type 字符串 → servo_index"""
-        mapping = {
-            "right_pitch": 0, "rp": 0,
-            "right_roll":  1, "rr": 1,
-            "left_pitch":  2, "lp": 2,
-            "left_roll":   3, "lr": 3,
-            "body":        4, "b":  4,
-            "head":        5, "h":  5,
-        }
-        return mapping.get(servo_type.lower(), -1)
-    
-    def _servo_move(self, servo_type: str, position: float, speed: int = 1000,
-                     **kwargs) -> Dict:
-        """self.electron.servo_move 仿真实现"""
-        idx = self._servo_index_from_name(servo_type)
-        if idx < 0:
-            return {"error": f"无效舵机类型: {servo_type}"}
-        
-        # 1. 舵机角度 → 机械关节角度
-        joint_angle = self._servo_to_joint(idx, position)
-        
-        # 2. 获取当前所有关节角度
-        current = self._get_joint_angles()
-        
-        # 3. 线性插值执行 (对齐固件 movements.cc:87 MoveServos)
-        steps = max(1, speed // 10)
-        for step in range(1, steps + 1):
-            t = step / steps              # 线性插值, 非 EaseOutCubic
-            target = np.copy(current)
-            target[idx] = current[idx] + (joint_angle - current[idx]) * t
-            self._step_sim(target)
-        
-        return {"status": "ok"}
-    
-    def _servo_sequences(self, sequence: str, **kwargs) -> Dict:
-        """self.electron.servo_sequences 仿真实现"""
-        seq = json.loads(sequence)
-        actions = seq.get("a", [])
-        
-        for action in actions:
-            if "osc" in action:
-                # 振荡模式
-                self._execute_oscillation(action["osc"])
-            elif "s" in action:
-                # 普通移动模式
-                targets = self._parse_servo_targets(action["s"])
-                speed = action.get("v", 1000)
-                self._move_all_servos(targets, speed)
-            
-            # 动作间延迟
-            delay = action.get("d", 0)
-            if delay > 0:
-                import time
-                time.sleep(delay / 1000.0)
-        
-        return {"status": "ok"}
-    
-    def _execute_oscillation(self, osc_params: dict):
-        """执行振荡动作——与固件 OscillateServos 行为一致"""
-        amplitudes = self._parse_servo_values(osc_params.get("a", {}), default=0)
-        centers = self._parse_servo_values(osc_params.get("o", {}), default=None)
-        period = osc_params.get("p", 500) / 1000.0  # ms → s
-        cycles = osc_params.get("c", 5)
-        
-        # 用当前角度填充未指定的 center
-        current = self._get_servo_angles()
-        for i in range(6):
-            if centers[i] is None:
-                centers[i] = current[i]
-        
-        # 正弦振荡
-        dt = self.env.model.opt.timestep
-        total_steps = int(period * cycles / dt)
-        
-        for step in range(total_steps):
-            phase = 2 * np.pi * step * dt / period
-            for i in range(6):
-                target_servo = centers[i] + amplitudes[i] * np.sin(phase)
-                joint_angle = self._servo_to_joint(i, target_servo)
-                self.env.data.ctrl[i] = joint_angle
-            self._step_sim_raw()
-    
-    def _hand_action(self, action: int, hand: int = 3, steps: int = 1, 
-                     speed: int = 1000, amount: int = 30, **kwargs) -> Dict:
-        """预设手部动作——复制真机固件 HandAction 的逻辑"""
-        # 动作映射：action=1举手、2放手、3挥手、4拍打；hand=1左手、2右手、3双手
-        # ⚠️ 对齐真机固件 movements.cc:225 的 times 限制逻辑：
-        #    times = 2 * max(3, min(100, times))
-        steps = 2 * max(3, min(100, steps))
-        # 此处在仿真中复现 movements.cc 的 HandAction 轨迹
-        
-        # 简化实现：根据 action+hand 计算目标角度序列
-        targets_list = self._generate_hand_targets(action, hand, steps, amount)
-        for targets in targets_list:
-            self._move_all_servos(targets, speed)
-        
-        return {"status": "ok"}
-    
-    def _body_turn(self, direction: int, steps: int = 1, speed: int = 1000, 
-                   angle: int = 45, **kwargs) -> Dict:
-        """身体转向"""
-        current = self._get_servo_angles()
-        center = self._servo_centers[4]  # body center = 90
-        
-        if direction == 1:      # 左转
-            current[4] = min(180, center + angle)
-        elif direction == 2:    # 右转
-            current[4] = max(0, center - angle)
-        elif direction == 3:    # 回中
-            current[4] = center
-        
-        self._move_all_servos(current, speed)
-        return {"status": "ok"}
-    
-    def _head_move(self, action: int, steps: int = 1, speed: int = 1000,
-                   angle: int = 5, **kwargs) -> Dict:
-        """头部运动"""
-        current = self._get_servo_angles()
-        center = self._servo_centers[5]  # head center = 90
-        
-        if action == 1:         # 抬头
-            current[5] = min(105, center + angle)
-        elif action == 2:       # 低头
-            current[5] = max(75, center - angle)
-        elif action == 3:       # 点头一次
-            current[5] = center + angle
-            self._move_all_servos(current, speed // 3)
-            current[5] = center - angle
-            self._move_all_servos(current, speed // 3)
-            current[5] = center
-            self._move_all_servos(current, speed // 3)
-        elif action == 4:       # 回中
-            current[5] = center
-        
-        self._move_all_servos(current, speed // 3)
-        return {"status": "ok"}
-    
-    def _home(self, **kwargs) -> Dict:
-        """复位"""
-        home_servo = np.array([180, 180, 0, 0, 90, 90])
-        self._move_all_servos(home_servo, 1000)
-        return {"status": "ok"}
-    
-    def _stop(self, **kwargs) -> Dict:
-        """停止 → 立即复位"""
-        self._is_moving = False
-        return self._home()
-    
-    def _get_status(self, **kwargs) -> Dict:
-        return {"status": "moving" if self._is_moving else "idle"}
-    
-    def _set_trim(self, servo_type: str, trim_value: int, **kwargs) -> Dict:
-        idx = self._servo_index_from_name(servo_type)
-        if idx < 0:
-            return {"error": f"无效舵机类型: {servo_type}"}
-        self._trims[idx] = trim_value
-        return {"status": "ok", "message": f"舵机 {servo_type} trim={trim_value}"}
-    
-    def _get_trims(self, **kwargs) -> Dict:
-        return {"trims": self._trims.tolist()}
-    
-    def _battery_level(self, **kwargs) -> Dict:
-        return {"level": 100, "charging": False}
-    
-    def _get_ip(self, **kwargs) -> Dict:
-        return {"ip": "127.0.0.1", "connected": True}
-    
-    # ========== 内部辅助 ==========
-    
-    def _get_servo_angles(self) -> np.ndarray:
-        """MuJoCo 关节角度 → 舵机角度"""
-        joint_angles = self.env.data.qpos[:6].copy()
-        servo = np.zeros(6)
-        for i in range(6):
-            servo[i] = self._joint_to_servo(i, joint_angles[i])
-        return servo
-    
-    def _get_joint_angles(self) -> np.ndarray:
-        return self.env.data.qpos[:6].copy()
-    
-    def _step_sim(self, joint_targets: np.ndarray):
-        self.env.data.ctrl[:] = joint_targets
-        self._step_sim_raw()
-    
-    def _step_sim_raw(self):
-        mujoco.mj_step(self.env.model, self.env.data)
-    
-    def _move_all_servos(self, servo_targets: np.ndarray, time_ms: int):
-        """将所有舵机缓动到目标位置（线性插值，对齐固件）"""
-        current_servo = self._get_servo_angles()
-        current_joint = self._get_joint_angles()
-        
-        # 舵机目标 → 关节目标
-        joint_targets = np.zeros(6)
-        for i in range(6):
-            joint_targets[i] = self._servo_to_joint(i, servo_targets[i])
-        
-        # 线性插值 (对齐固件 movements.cc:87)
-        steps = max(1, time_ms // 10)
-        self._is_moving = True
-        for step in range(1, steps + 1):
-            t = step / steps
-            # 线性插值 (对齐固件: increment = (target-pos)/(time/10.0))
-            interpolated = current_joint + (joint_targets - current_joint) * t
-            self._step_sim(interpolated)
-        self._is_moving = False
-    
-    # ========== JSON-RPC 入口 ==========
-    
-    def handle_request(self, request: Dict) -> Dict:
-        """处理 JSON-RPC 请求——兼容真实 MCP 协议和仿真简化格式
-        
-        真实 MCP 协议 (参照固件 mcp_server.cc + mcp-protocol_zh.md):
-          {"method":"tools/call", "params":{"name":"工具名", "arguments":{参数}}}
-          → 响应: {"result":{"content":[{type:"text", text:"..."}], "isError":false}}
-        
-        仿真简化格式 (内部调试):
-          {"method":"self.electron.xxx", "params":{参数}}
-          → 响应: {"result":{返回值}}
-        """
-        method = request.get("method", "")
-        req_id = request.get("id")
-        
-        # ── 路径 1: 标准 MCP tools/call 格式 (与真机一致) ──
-        if method == "tools/call":
-            tool_name = request.get("params", {}).get("name", "")
-            tool_args = request.get("params", {}).get("arguments", {})
-            
-            handler = self._tool_registry.get(tool_name)
-            if handler is None:
-                return self._error(req_id, -32601, f"Unknown tool: {tool_name}")
-            
-            try:
-                result = handler(**tool_args)
-                return self._success_mcp(req_id, str(result))
-            except Exception as e:
-                return self._error(req_id, -32603, str(e))
-        
-        # ── 路径 2: 扁平格式 (仿真内部调试/测试兼容) ──
-        params = request.get("params", {})
-        handler = self._tool_registry.get(method)
-        if handler is None:
-            return self._error(req_id, -32601, f"未知方法: {method}")
-        
-        try:
-            result = handler(**params)
-            return self._success_mcp(req_id, str(result))
-        except Exception as e:
-            return self._error(req_id, -32603, str(e))
-    
-    @staticmethod
-    def _success_mcp(req_id, text: str) -> Dict:
-        return {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "result": {
-                "content": [{"type": "text", "text": text}],
-                "isError": False
-            }
-        }
-    
-    @staticmethod
-    def _error(req_id, code: int, message: str) -> Dict:
-        return {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "error": {"code": code, "message": message}
-        }
+**对外开放接口**:
+
 ```
+McpSimBridge(env: ElectronBotEnv)          # 构造，注入 MuJoCo 环境
+    └── handle_request(request: dict) → dict   # JSON-RPC 入口，兼容 tools/call 和扁平格式
+```
+
+**内部关键属性**:
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `_servo_centers` | `np.ndarray[6]` | 舵机中心角度 `[180, 140, 0, 40, 90, 90]` |
+| `_servo_ratios` | `np.ndarray[6]` | 舵机→关节映射比 `[1.0, 1.125, 1.0, 1.125, 1.5, 2.0]` |
+| `_servo_directions` | `np.ndarray[6]` | 方向 (±1) `[-1, -1, 1, 1, 1, 1]` |
+| `_tool_registry` | `dict[str, callable]` | 12 个工具的注册映射表（详见 [5.2.1](#521-12-个-mcp-工具签名表)） |
+| `_trims` | `np.ndarray[6]` | 各舵机微调值 |
+
+**核心内部方法**:
+
+| 方法 | 说明 |
+|------|------|
+| `_servo_to_joint(idx, servo_angle)` | 舵机角度 → MuJoCo 关节角度（公式: `(servo-center)*ratio*direction`） |
+| `_joint_to_servo(idx, joint_angle)` | MuJoCo 关节角度 → 舵机角度 |
+| `_servo_index_from_name(servo_type)` | servo_type 字符串 → 索引（支持 `rp`/`rr`/`lp`/`lr`/`b`/`h` 及完整名） |
+
+**请求处理逻辑** (`handle_request`):
+
+1. 识别 `method == "tools/call"` → 标准 MCP 两层嵌套格式，从 `params.name` 取工具名、`params.arguments` 取参数
+2. 否则 → 扁平调试格式，将 `method` 作为工具名、`params` 作为参数
+3. 查 `_tool_registry` → 调用对应 handler → 封装 JSON-RPC 响应
+4. 错误时返回标准错误码（-32601 未知方法、-32602 参数错误、-32603 内部错误）
+
+**动作执行约定**:
+- 所有舵机运动使用**线性插值**（对齐固件 `movements.cc:87`，非 EaseOutCubic）
+- 插值步数: `steps = speed // 10`
+- 查询类工具（`get_status`/`get_trims`/`battery.get_level`/`get_ip`）不驱动仿真步进
 
 ### 2.2 WebSocket 服务器 (仿真调试用)
 
-```python
-# src/electronbot_sim/mcp_server.py
+**文件**: `src/electronbot_sim/mcp_server.py`
 
-import asyncio
-import json
-import websockets
-from electronbot_sim.env import ElectronBotEnv
-from electronbot_sim.mcp_bridge import McpSimBridge
+**职责**: 仿真环境下的本地 WebSocket 调试服务器，非真机通信接口。
 
-class McpWebSocketServer:
-    """仿真 WebSocket 服务器——用于本地调试，非真机通信接口
-    
-    ⚠️ 注意：真机 ESP32 (release v2.2.6) 没有 WebSocket Server。
-    此服务器仅用于仿真环境下的本地调试和开发。
-    真机通信请使用 ElectronBotBackend("cloud", ...) 通过云端 API 透传。
-    """
-    
-    def __init__(self, host="localhost", port=8080):
-        self.host = host
-        self.port = port
-        self.env = ElectronBotEnv(render_mode="human")
-        self.bridge = McpSimBridge(self.env)
-        self.clients = set()
-    
-    async def handler(self, websocket):
-        self.clients.add(websocket)
-        try:
-            async for message in websocket:
-                try:
-                    data = json.loads(message)
-                    
-                    # ── 标准 MCP 封装格式 ──
-                    if data.get("type") == "mcp":
-                        payload = data["payload"]
-                        response_payload = self.bridge.handle_request(payload)
-                        # 按原格式封装返回
-                        await websocket.send(json.dumps({
-                            "type": "mcp",
-                            "payload": response_payload
-                        }))
-                    else:
-                        # ── 扁平格式 (调试兼容) ──
-                        response_payload = self.bridge.handle_request(data)
-                        await websocket.send(json.dumps(response_payload))
-                    
-                except json.JSONDecodeError:
-                    await websocket.send(json.dumps({
-                        "jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}
-                    }))
-        finally:
-            self.clients.remove(websocket)
-    
-    async def start(self):
-        print(f"🔌 ElectronBot 仿真 MCP 服务器已启动 (调试模式)")
-        print(f"   ws://{self.host}:{self.port}/ws")
-        print(f"   ⚠️ 此服务器仅用于仿真调试，不用于真机连接")
-        print(f"   真机部署请使用: ElectronBotBackend('cloud', ...)")
-        print(f"   ───")
-        async with websockets.serve(self.handler, self.host, self.port):
-            await asyncio.Future()  # 永久运行
+> ⚠️ 真机 ESP32 (release v2.2.6) 没有 WebSocket Server。此服务器仅用于仿真调试。真机通信请使用 `ElectronBotBackend("cloud", ...)`。
 
-# 入口
-if __name__ == "__main__":
-    server = McpWebSocketServer()
-    asyncio.run(server.start())
+**对外接口**:
+
 ```
+McpWebSocketServer(host="localhost", port=8080)  # 构造，创建 ElectronBotEnv + McpSimBridge
+    └── async start()                             # 启动 WebSocket 监听 ws://{host}:{port}/ws
+```
+
+**消息处理逻辑** (`handler`):
+1. 收到消息 → 解析 JSON
+2. `type == "mcp"` → 取 `payload` 字段作为 JSON-RPC 请求 → 调用 `McpSimBridge.handle_request` → 按 `{"type":"mcp","payload":<响应>}` 封装返回
+3. 否则 → 直接作为 JSON-RPC 请求 → 调用 `McpSimBridge.handle_request` → 返回响应
+4. JSON 解析失败 → 返回 `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"}}`
+
+**安全约束**: 默认仅监听 `localhost`，不提供认证，禁止暴露到公网。
 
 ### 2.3 统一 Backend API
 
-```python
-# src/electronbot_sim/backend.py
+**文件**: `src/electronbot_sim/backend.py`
 
-import json
-from typing import Literal
+**职责**: AI 策略层统一入口，屏蔽 sim/cloud 差异，Sim2Real 零修改迁移。
 
-class ElectronBotBackend:
-    """
-    统一后端——AI 策略通过此类访问机器人，
-    不感知下面是仿真还是真机。
-    
-    模式说明:
-    - "sim":  本地 MuJoCo 仿真 (调试/训练用)
-    - "cloud": 小智云端 API 透传 → ESP32 真机 (生产部署)
-    
-    ⚠️ release v2.2.6 真机无本地 WebSocket Server，
-    所有真机通信必须通过云端小智 API 透传。
-    """
-    
-    def __init__(self, mode: Literal["sim", "cloud"] = "sim", **kwargs):
-        self.mode = mode
-        
-        if mode == "sim":
-            from electronbot_sim.env import ElectronBotEnv
-            from electronbot_sim.mcp_bridge import McpSimBridge
-            self._env = ElectronBotEnv(render_mode=kwargs.get("render", "human"))
-            self._bridge = McpSimBridge(self._env)
-            
-        elif mode == "cloud":
-            # 通过小智云端 API 连接真机 ESP32
-            self._api_url = kwargs.get("api_url", "https://api.xiaozhi.cn/v1")
-            self._device_id = kwargs["device_id"]
-            self._api_key = kwargs.get("api_key")
-            
-        else:
-            raise ValueError(f"Unknown mode: {mode}")
-    
-    def call(self, method: str, params: dict) -> dict:
-        """
-        调用 MCP 工具——仿真和真机完全相同的调用方式
-        
-        Example:
-          # 仿真
-          backend = ElectronBotBackend("sim")
-          backend.call("self.electron.hand_action", {"action":3,"hand":3,"steps":2,"speed":600})
-          
-          # 真机 (云端 API)
-          backend = ElectronBotBackend("cloud", device_id="eb-001")
-          backend.call("self.electron.hand_action", {"action":3,"hand":3,"steps":2,"speed":600})
-        """
-        if self.mode == "sim":
-            # 仿真：直接调用 MCP Bridge
-            return self._bridge.handle_request({
-                "jsonrpc": "2.0",
-                "method": "tools/call",
-                "params": {"name": method, "arguments": params}
-            })
-        else:
-            # 真机：通过云端 API 透传 (同步封装)
-            import asyncio
-            return asyncio.run(self._call_cloud(method, params))
-    
-    async def call_async(self, method: str, params: dict) -> dict:
-        """异步调用真机"""
-        if self.mode == "sim":
-            return self.call(method, params)
-        return await self._call_cloud(method, params)
-    
-    async def _call_cloud(self, tool_name: str, arguments: dict) -> dict:
-        """通过小智云端 API 发送 MCP 命令到 ESP32"""
-        import httpx
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self._api_url}/devices/{self._device_id}/tools/call",
-                json={"name": tool_name, "arguments": arguments},
-                headers={"Authorization": f"Bearer {self._api_key}"} if self._api_key else {},
-                timeout=30.0
-            )
-            response.raise_for_status()
-            return response.json()
+**对外接口**:
+
 ```
+ElectronBotBackend(mode="sim"|"cloud", **kwargs)  # 构造
+    ├── call(method: str, params: dict) → dict    # 同步调用 MCP 工具
+    └── call_async(method: str, params: dict) → dict  # 异步调用（cloud 模式推荐）
+```
+
+**模式说明**:
+
+| 模式 | 参数 | 底层调用路径 |
+|------|------|-------------|
+| `"sim"` | `render="human"\|"rgb_array"\|None` | 本地 MuJoCo → `McpSimBridge.handle_request` |
+| `"cloud"` | `device_id`, `api_key`, `api_url` | `POST {api_url}/devices/{device_id}/tools/call` → ESP32 真机 |
+
+**调用语义**:
+- `call`：sim 模式即时返回；cloud 模式内部 `asyncio.run` 包装 HTTP 调用
+- `call_async`：cloud 模式复用 `httpx.AsyncClient`，适用于高并发场景
 
 ---
 
@@ -757,164 +362,198 @@ class ElectronBotBackend:
 
 ### 3.1 自动化测试
 
-```python
-# tests/test_mcp_bridge.py
+**文件**: `tests/test_mcp_bridge.py`
 
-import json
-from electronbot_sim.env import ElectronBotEnv
-from electronbot_sim.mcp_bridge import McpSimBridge
+**测试范围**: 使用标准 `tools/call` 格式逐个调用全部 12 个 MCP 工具，验证响应格式和数据正确性。
 
-def test_all_tools():
-    env = ElectronBotEnv(render_mode=None)
-    bridge = McpSimBridge(env)
-    
-    # 测试每个工具——使用标准 tools/call 格式 (与真机一致)
-    tests = [
-        ("self.electron.home", {}),
-        ("self.electron.get_status", {}),
-        ("self.electron.servo_move", {"servo_type": "rp", "position": 120, "speed": 500}),
-        ("self.electron.servo_move", {"servo_type": "rr", "position": 160, "speed": 500}),
-        ("self.electron.servo_move", {"servo_type": "lp", "position": 60, "speed": 500}),
-        ("self.electron.servo_move", {"servo_type": "lr", "position": 20, "speed": 500}),
-        ("self.electron.servo_move", {"servo_type": "b", "position": 60, "speed": 500}),
-        ("self.electron.servo_move", {"servo_type": "h", "position": 100, "speed": 500}),
-        ("self.electron.hand_action", {"action": 3, "hand": 3, "steps": 1, "speed": 300}),
-        ("self.electron.body_turn", {"direction": 1, "speed": 500, "angle": 30}),
-        ("self.electron.head_move", {"action": 3, "speed": 300, "angle": 5}),
-        ("self.electron.get_ip", {}),
-        ("self.battery.get_level", {}),
-        ("self.electron.set_trim", {"servo_type": "rp", "trim_value": 5}),
-        ("self.electron.get_trims", {}),
-    ]
-    
-    for tool_name, args in tests:
-        # 使用标准 tools/call 格式
-        result = bridge.handle_request({
-            "jsonrpc": "2.0",
-            "method": "tools/call",        # ← 固定值
-            "params": {
-                "name": tool_name,          # ← 工具名
-                "arguments": args           # ← 参数
-            },
-            "id": 1
-        })
-        assert "error" not in result, f"{tool_name} 失败: {result.get('error')}"
-        # 验证 MCP 标准响应格式
-        assert "result" in result
-        assert "content" in result["result"]
-        assert result["result"]["isError"] == False
-        print(f"  ✅ {tool_name}")
-    
-    print(f"✅ 全部 {len(tests)} 个 MCP 工具测试通过 (tools/call 格式)")
-    
-def test_flat_format():
-    """验证扁平格式兼容性"""
-    env = ElectronBotEnv(render_mode=None)
-    bridge = McpSimBridge(env)
-    
-    # 扁平格式 (仿真调试)
-    result = bridge.handle_request({
-        "jsonrpc": "2.0",
-        "method": "self.electron.get_status",
-        "params": {}
-    })
-    assert "error" not in result
-    assert result["result"]["content"][0]["text"] in ("idle", "moving")
-    print("  ✅ 扁平格式兼容性通过")
+**测试用例清单**:
 
-def test_servo_to_joint_conversion():
-    """验证舵机↔关节转换正确性"""
-    env = ElectronBotEnv(render_mode=None)
-    bridge = McpSimBridge(env)
-    
-    # 测试 home 姿态下关节角度
-    bridge._home()
-    servo_angles = bridge._get_servo_angles()
-    joint_angles = bridge._get_joint_angles()
-    
-    # home: servo=[180,180,0,0,90,90], joint=[0,-45,0,-45,0,0]
-    expected_joint = [0, -45, 0, -45, 0, 0]
-    for i in range(6):
-        assert abs(joint_angles[i] - expected_joint[i]) < 1.0, \
-            f"关节 {i}: 期望 {expected_joint[i]}°, 实际 {joint_angles[i]:.1f}°"
-    
-    print("✅ 舵机↔关节转换验证通过")
+| 测试函数 | 验证目标 |
+|---------|---------|
+| `test_all_tools()` | 12 个工具全部可调用，响应格式为 MCP 标准 `result.content[0].text` + `isError:false` |
+| `test_flat_format()` | 扁平调试格式兼容性：`method` 直接传工具名可正常执行 |
+| `test_servo_to_joint_conversion()` | home 姿态下舵机 `[180,180,0,0,90,90]` → 关节 `[0,-45,0,-45,0,0]` 精度 < 1° |
+| `test_servo_sequence()` | `servo_sequences` 的 JSON 序列解析、普通移动和正弦振荡模式均正常 |
 
-def test_servo_sequence():
-    """验证 servo_sequences"""
-    env = ElectronBotEnv(render_mode=None)
-    bridge = McpSimBridge(env)
-    
-    seq = json.dumps({
-        "a": [
-            {"s": {"rp": 90, "lp": 90}, "v": 500},
-            {"osc": {"a": {"rp": 20}, "o": {"rp": 120}, "p": 300, "c": 2}}
-        ]
-    })
-    
-    result = bridge._servo_sequences(sequence=seq)
-    assert result["status"] == "ok"
-    print("✅ servo_sequences 验证通过")
-```
+**运行方式**: `pytest tests/test_mcp_bridge.py -v`
 
 ### 3.2 WebSocket 端到端测试
 
-```python
-# tests/test_websocket_e2e.py
+**文件**: `tests/test_websocket_e2e.py`
 
-import asyncio
-import json
-import websockets
+**测试范围**: 通过 WebSocket 连接仿真服务器，使用 `tools/call` 格式发送指令，验证消息封装/解封正确性。
 
-async def test_ws_e2e():
-    async with websockets.connect("ws://localhost:8080/ws") as ws:
-        # 测试 tools/call 标准格式
-        await ws.send(json.dumps({
-            "type": "mcp",
-            "payload": {
-                "jsonrpc": "2.0",
-                "method": "tools/call",
-                "params": {"name": "self.electron.home", "arguments": {}},
-                "id": 1
-            }
-        }))
-        resp = json.loads(await ws.recv())
-        assert resp["type"] == "mcp"
-        assert resp["payload"]["result"]["isError"] == False
-        print("  ✅ home via WebSocket (tools/call 格式)")
-        
-        # 测试 get_status
-        await ws.send(json.dumps({
-            "type": "mcp",
-            "payload": {
-                "jsonrpc": "2.0",
-                "method": "tools/call",
-                "params": {"name": "self.electron.get_status", "arguments": {}},
-                "id": 2
-            }
-        }))
-        resp = json.loads(await ws.recv())
-        text = resp["payload"]["result"]["content"][0]["text"]
-        assert text in ("moving", "idle")
-        print("  ✅ get_status via WebSocket (tools/call 格式)")
-    
-    print("✅ WebSocket 端到端测试通过")
-```
+**测试用例**:
+
+| 测试步骤 | 验证目标 |
+|---------|---------|
+| 连接 `ws://localhost:8080/ws` | 连接成功 |
+| 发送 `home` 命令（type=mcp 封装） | 返回 `isError:false` |
+| 发送 `get_status` 命令 | 返回 `"idle"` 或 `"moving"` |
+| 验证响应外层封装 | `resp["type"] == "mcp"`，内层为 JSON-RPC 响应 |
+
+**运行方式**: 先启动 `python -m electronbot_sim.mcp_server`，再运行 `pytest tests/test_websocket_e2e.py -v`
 
 ### 3.3 手动验证
 
+提供两种验证方式：**Web 调试面板**（推荐，无需安装客户端）和 **websocat 命令行**（轻量，适合脚本自动化）。
+
+#### 3.3.1 方式一：Web 调试面板（推荐）
+
+无需安装任何客户端，直接用浏览器打开。
+
+**本地运行**（支持 `file://` 协议，无需 Web 服务器）：
+
 ```bash
-# 启动仿真服务器
+# 终端 A：启动仿真服务器
+python -m electronbot_sim.mcp_server
+```
+
+然后在浏览器中打开 `web/mcp-debug-panel.html`：
+
+```
+file:///mnt/data2/projects/xiaozhi/ElectronBot_SIM/web/mcp-debug-panel.html
+```
+
+**远程 / SSH 运行**（通过 HTTP 服务托管，从本地浏览器访问）：
+
+```bash
+# 终端 A：启动仿真服务器
 python -m electronbot_sim.mcp_server
 
-# 另一个终端，用 websocat 测试
+# 终端 B：启动 HTTP 静态文件服务（托管调试面板）
+cd ~/数据盘/projects/xiaozhi/ElectronBot_SIM/web
+python3 -m http.server 8081 --bind 0.0.0.0
+```
+
+然后在本地电脑浏览器访问 `http://<服务器IP>:8081/mcp-debug-panel.html`。
+
+> **提示**：远程访问时，调试面板默认连接 `ws://localhost:8080/ws`，需将面板中连接地址改为 `ws://<服务器IP>:8080/ws`。
+
+**面板功能**：
+- **左侧**：按类别分组的工具按钮（预设动作 / 身体控制 / 舵机控制 / 序列动作 / 系统指令 / 查询工具）
+- 每个按钮下方显示完整的 JSON-RPC 请求体（点击可展开/收起）
+- 按钮上标记 `@SIM`（仅仿真）/ `REAL`（真机对齐）/ `QUERY`（查询类）
+- **右侧**：实时请求/响应日志，绿边=响应、蓝边=请求、红边=错误
+
+> **注意**：启动后 MuJoCo 窗口弹出，应直接看到完整机器人。若只看到天空/地面，参考 [known issues](#15-known-issues)。
+
+#### 3.3.2 方式二：websocat 命令行
+
+```bash
+# 终端 B：安装 websocat（如未安装）
+sudo apt install websocat    # Ubuntu/Debian
+# 或
+pip install websocat
+
+# 连接
 websocat ws://localhost:8080/ws
+```
 
-# 标准 tools/call 格式 (与真机云端通信一致)
-> {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":3,"hand":3,"steps":2,"speed":600}},"id":1}}
-< {"type":"mcp","payload":{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{'status': 'ok'}"}],"isError":false}}}
+连接成功后进入交互模式，**每次按回车发送一行文本**：
 
-# 观察仿真窗口：机器人双手挥手
+| 输入内容 | 预期行为 |
+|---------|---------|
+| 空行（直接回车） | 返回 JSON 解析错误 `{"error":{"code":-32700,"message":"JSON 解析失败: ..."}}`**
+| 非 JSON 字符串 | 同上 |
+| 一行完整 JSON | 执行工具并返回 JSON-RPC 响应 |
+
+> **🔑 关键提示**：`websocat` 是行协议模式，粘贴一行 JSON 后**按回车才会发送**。终端中的空行错误是正常的，只需粘贴有效 JSON 即可正常通信。退出按 `Ctrl+C`。
+
+#### 3.3.3 常用测试命令
+
+以下命令可直接粘贴到 `websocat` 终端中，按回车发送：
+
+**⚠️ 提示：所有命令需要在一行内，粘贴后按回车。**
+
+**查询工具列表**：
+```json
+{"jsonrpc":"2.0","method":"tools/list","id":0}
+```
+
+**查询状态（`get_status`）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_status","arguments":{}},"id":1}}
+```
+
+**复位（`home`）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.home","arguments":{}},"id":2}}
+```
+
+**双手挥手（`hand_action`，action=3）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":3,"hand":3,"steps":2,"speed":600}},"id":3}}
+```
+
+**双手举手（`hand_action`，action=1）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":1,"hand":3,"steps":2,"speed":800}},"id":4}}
+```
+
+**双手放手（`hand_action`，action=2）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":2,"hand":3,"steps":2,"speed":800}},"id":5}}
+```
+
+**双手拍打（`hand_action`，action=4）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.hand_action","arguments":{"action":4,"hand":3,"steps":2,"speed":600}},"id":6}}
+```
+
+**点头（`head_move`，action=3）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.head_move","arguments":{"action":3,"angle":8,"speed":400}},"id":7}}
+```
+
+**抬头（`head_move`，action=1）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.head_move","arguments":{"action":1,"angle":10,"speed":300}},"id":8}}
+```
+
+**低头（`head_move`，action=2）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.head_move","arguments":{"action":2,"angle":10,"speed":300}},"id":9}}
+```
+
+**左转身体（`body_turn`，direction=1）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.body_turn","arguments":{"direction":1,"angle":45,"speed":1000}},"id":10}}
+```
+
+**右转身体（`body_turn`，direction=2）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.body_turn","arguments":{"direction":2,"angle":45,"speed":1000}},"id":11}}
+```
+
+**回正身体（`body_turn`，direction=3）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.body_turn","arguments":{"direction":3}},"id":12}}
+```
+
+**单舵机精确定位（`servo_move`，@sim_only）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.servo_move","arguments":{"servo_type":"rp","position":90,"speed":1000}},"id":13}}
+```
+
+**查询电池（`battery.get_level`）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.battery.get_level","arguments":{}},"id":14}}
+```
+
+**紧急停止（`stop`）**：
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.stop","arguments":{}},"id":15}}
+```
+
+#### 3.3.4 仿真调试专用：扁平格式
+
+仿真端额外支持简化的扁平格式（无需 `type/mcp` 包裹层），仅内部调试用，真机不可用：
+
+```json
+{"jsonrpc":"2.0","method":"self.electron.home","params":{},"id":100}
+{"jsonrpc":"2.0","method":"self.electron.get_status","params":{}}
+{"jsonrpc":"2.0","method":"self.electron.get_ip","params":{}}
 ```
 
 ### 3.4 验证效果步骤与预期
@@ -925,15 +564,96 @@ websocat ws://localhost:8080/ws
 
 #### 3.4.1 环境就绪验证
 
-| 步骤 | 操作 | 预期终端输出 | 预期仿真窗口 |
-|:---:|------|------------|------------|
-| 1 | 启动仿真服务器 | 终端打印启动信息：`🔌 ElectronBot 仿真 MCP 服务器已启动 (调试模式)`、`ws://localhost:8080/ws`、`⚠️ 此服务器仅用于仿真调试` | MuJoCo 窗口弹出，显示 ElectronBot 3D 模型，机器人处于默认（home）姿态：双臂上举、身体朝前、头部水平 |
-| 2 | `websocat` 连接 | 连接成功无报错，等待输入 | 机器人保持静止 |
-| 3 | 发送查询：`{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_status","arguments":{}},"id":1}}` | 返回 `"text":"idle"`，`isError:false` | 无变化 |
-| 4 | 发送查询：`{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.battery.get_level","arguments":{}},"id":2}}` | 返回 `"text":"{'level': 100, 'charging': False}"` | 无变化 |
-| 5 | 发送查询：`{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_ip","arguments":{}},"id":3}}` | 返回 `"text":"{'ip': '127.0.0.1', 'connected': True}"` | 无变化 |
+**步骤 1 — 启动仿真服务器**
 
-> **检查点**：环境就绪后，4 个查询类工具（`get_status` / `battery.get_level` / `get_ip` / `get_trims`）应全部返回 `isError:false` 且秒级响应，仿真窗口不闪动。
+打开终端 A，执行：
+
+```bash
+cd /home/maple/数据盘/projects/xiaozhi/ElectronBot_SIM
+python -m electronbot_sim.mcp_server
+```
+
+| 检查项 | 预期结果 |
+|--------|---------|
+| 终端输出 | `🔌 ElectronBot 仿真 MCP 服务器已启动 (调试模式)`<br>`   ws://localhost:8080/ws`<br>`   ⚠️ 此服务器仅用于仿真调试，不用于真机连接`<br>`   真机部署请使用: ElectronBotBackend('cloud', ...)`<br>`   ───` |
+| 仿真窗口 | MuJoCo 窗口弹出，显示 ElectronBot 3D 模型，机器人处于默认（home）姿态：双臂上举、身体朝前、头部水平 |
+
+**步骤 2 — WebSocket 客户端连接**
+
+打开终端 B，使用 `websocat` 连接仿真服务器：
+
+```bash
+websocat ws://localhost:8080/ws
+```
+
+| 检查项 | 预期结果 |
+|--------|---------|
+| 连接状态 | 连接成功，无报错，光标等待输入 |
+| 仿真窗口 | 机器人保持静止，窗口持续渲染 |
+
+> 如未安装 `websocat`，可先执行 `sudo apt install websocat` 或 `pip install websocat`。
+
+**步骤 3 — 查询机器人状态（`get_status`）**
+
+在终端 B（`websocat` 交互界面）中输入以下 JSON 并回车：
+
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_status","arguments":{}},"id":1}}
+```
+
+| 检查项 | 预期结果 |
+|--------|---------|
+| 终端 B 返回 | `{"type":"mcp","payload":{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"idle"}],"isError":false}}}` |
+| 仿真窗口 | 无变化 |
+
+> **关键验证点**：`isError` 为 `false`，`text` 为 `"idle"`（刚启动时无动作执行）。
+
+**步骤 4 — 查询电池电量（`battery.get_level`）**
+
+在终端 B 中输入：
+
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.battery.get_level","arguments":{}},"id":2}}
+```
+
+| 检查项 | 预期结果 |
+|--------|---------|
+| 终端 B 返回 | `{"type":"mcp","payload":{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{'level': 100, 'charging': False}"}],"isError":false}}}` |
+| 仿真窗口 | 无变化 |
+
+> **关键验证点**：仿真环境下电池固定返回 `level: 100, charging: false`。
+
+**步骤 5 — 查询 IP 地址（`get_ip`，@sim_only）**
+
+在终端 B 中输入：
+
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_ip","arguments":{}},"id":3}}
+```
+
+| 检查项 | 预期结果 |
+|--------|---------|
+| 终端 B 返回 | `{"type":"mcp","payload":{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{'ip': '127.0.0.1', 'connected': True}"}],"isError":false}}}` |
+| 仿真窗口 | 无变化 |
+
+**步骤 6 — 查询 Trim 微调值（`get_trims`）**
+
+在终端 B 中输入：
+
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.electron.get_trims","arguments":{}},"id":4}}
+```
+
+| 检查项 | 预期结果 |
+|--------|---------|
+| 终端 B 返回 | `{"type":"mcp","payload":{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"{'trims': [0, 0, 0, 0, 0, 0]}"}],"isError":false}}}` |
+| 仿真窗口 | 无变化 |
+
+> **关键验证点**：初始 trim 全为零，数组长度为 6（对应 6 个舵机）。
+
+---
+
+> **环境就绪检查点**：以上 6 个步骤全部通过（4 个查询类工具 `get_status` / `battery.get_level` / `get_ip` / `get_trims` 均返回 `isError:false`），且每次响应在秒级内返回，仿真窗口不闪动、不崩溃，即确认环境就绪。
 
 ---
 
@@ -1089,20 +809,45 @@ print("✅ Backend API 手动验证全部通过")
 
 完成以下全部检查项即视为 Phase 4 验证通过：
 
-| # | 检查项 | 通过标准 |
-|:---:|------|---------|
-| 1 | 服务器正常启动 | 终端打印启动信息，MuJoCo 窗口正常渲染，机器人处于 home 姿态 |
-| 2 | WebSocket 连接正常 | `websocat` 连接成功，可收发 JSON 消息 |
-| 3 | 4 个查询类工具可用 | `get_status` / `battery.get_level` / `get_ip` / `get_trims` 全部返回 `isError:false` |
-| 4 | 6 个舵机独立可控 | `servo_move` 分别对 rp/rr/lp/lr/b/h 发送指令，仿真窗口各关节独立运动 |
-| 5 | 预设动作正确执行 | `hand_action`(4 种 action × 3 种 hand)、`body_turn`(3 种 direction)、`head_move`(4 种 action) 全部正确，仿真窗口运动轨迹符合预期 |
-| 6 | 振荡器行为正确 | `servo_sequences` 的正弦振荡周期、振幅、中心与参数一致，视觉上连续平滑无抖动 |
-| 7 | home/stop 正确复位 | 任意动作后调用 home 或 stop，机器人回到 `[180,180,0,0,90,90]` 姿态 |
-| 8 | trim 读写正确 | `set_trim` 后可 `get_trims` 读到相同值 |
-| 9 | 错误处理完备 | 未知工具、非法 JSON、参数缺失均返回对应 JSON-RPC 错误码，仿真不崩溃 |
-| 10 | Backend API 统一调用 | sim 模式下 `ElectronBotBackend("sim").call(...)` 可正确驱动所有 12 个工具 |
-| 11 | MCP 标准格式兼容 | `tools/call` 两层嵌套格式与扁平格式均正常处理，响应格式与真机协议一致 |
-| 12 | 真机协议对齐（如真机可用） | 8 个真机对齐工具通过 WebSocket 在真机上执行，响应格式与仿真一致 |
+> **当前状态**：2026-07-09 已通过 Web 调试面板完成全部仿真端验证（#1~#11 ✅），真机对齐（#12）待后续。验证日志见下方终端输出。
+
+| # | 检查项 | 通过标准 | 状态 |
+|:---:|------|---------|:--:|
+| 1 | 服务器正常启动 | 终端打印启动信息，MuJoCo 窗口正常渲染，机器人处于 home 姿态 | ✅ |
+| 2 | WebSocket 连接正常 | Web 调试面板 / `websocat` 连接成功，可收发 JSON 消息 | ✅ |
+| 3 | 4 个查询类工具可用 | `get_status` / `battery.get_level` / `get_ip` / `get_trims` 全部返回 `isError:false` | ✅ |
+| 4 | 6 个舵机独立可控 | `servo_move` 分别对 rp/rr/lp/lr/b/h 发送指令，仿真窗口各关节独立运动 | ✅ |
+| 5 | 预设动作正确执行 | `hand_action`(4 种 action × 3 种 hand)、`body_turn`(3 种 direction)、`head_move`(4 种 action) 全部正确，仿真窗口运动轨迹符合预期 | ✅ |
+| 6 | 振荡器行为正确 | `servo_sequences` 的正弦振荡周期、振幅、中心与参数一致，视觉上连续平滑无抖动 | ✅ |
+| 7 | home/stop 正确复位 | 任意动作后调用 home 或 stop，机器人回到 `[180,180,0,0,90,90]` 姿态 | ✅ |
+| 8 | trim 读写正确 | `set_trim` 后可 `get_trims` 读到相同值 | ✅ |
+| 9 | 错误处理完备 | 未知工具、非法 JSON、参数缺失均返回对应 JSON-RPC 错误码，仿真不崩溃 | ✅ |
+| 10 | Backend API 统一调用 | sim 模式下 `ElectronBotBackend("sim").call(...)` 可正确驱动所有 12 个工具 | ✅ |
+| 11 | MCP 标准格式兼容 | `tools/call` 两层嵌套格式与扁平格式均正常处理，响应格式与真机协议一致 | ✅ |
+| 12 | 真机协议对齐（如真机可用） | 8 个真机对齐工具通过 WebSocket 在真机上执行，响应格式与仿真一致 | ⏳ |
+
+**仿真端验证输出示例（2026-07-09）**：
+
+```
+📥 收到请求: self.electron.hand_action
+   参数: {'action': 3, 'hand': 3, 'steps': 2, 'speed': 600}
+   ✅ 响应: {"status": "ok", "action": 3, "hand": 3, "times": 6}
+📥 收到请求: self.electron.body_turn
+   参数: {'direction': 1, 'angle': 45, 'speed': 1000}
+   ✅ 响应: {"status": "ok", "direction": 1, "angle": 45}
+📥 收到请求: self.electron.head_move
+   参数: {'action': 3, 'angle': 8, 'speed': 400}
+   ✅ 响应: {"status": "ok", "action": 3, "angle": 8}
+📥 收到请求: self.electron.servo_sequences
+   参数: {'sequence': '{"a":[{"osc":{"a":{"rr":30},"o":{"rr":140},"p":500,"c":3}}]}'}
+   ✅ 响应: {"status": "ok", "executed": 1}
+📥 收到请求: self.electron.home
+   ✅ 响应: {"status": "ok", "position": [180.0, 180.0, 0.0, 0.0, 90.0, 90.0]}
+📥 收到请求: self.electron.get_status
+   ✅ 响应: {"status": "idle"}
+📥 收到请求: self.battery.get_level
+   ✅ 响应: {"level": 100, "voltage": 4.2, "is_charging": false}
+```
 
 ---
 
@@ -1111,8 +856,9 @@ print("✅ Backend API 手动验证全部通过")
 | 文件 | 描述 |
 |------|------|
 | `src/electronbot_sim/mcp_bridge.py` | MCP Bridge 核心（工具注册+舵机↔关节转换） |
-| `src/electronbot_sim/mcp_server.py` | WebSocket 服务器入口 |
+| `src/electronbot_sim/mcp_server.py` | WebSocket 服务器入口（含接收数据打印） |
 | `src/electronbot_sim/backend.py` | 统一 Backend API（sim↔real 切换） |
+| `web/mcp-debug-panel.html` | Web 调试面板（推荐验证方式，浏览器直接打开） |
 | `tests/test_mcp_bridge.py` | MCP 工具单元测试 |
 | `tests/test_websocket_e2e.py` | WebSocket 端到端测试 |
 
@@ -1617,9 +1363,81 @@ except Exception as e:
 
 ---
 
-## 11. 变更记录
+## 15. Known Issues
+
+### 15.1 MuJoCo Viewer 初始视角过近 + 手臂被身体遮挡
+
+**现象**：启动 `python -m electronbot_sim.mcp_server` 后，MuJoCo 渲染窗口只显示天空和部分地面，需要手动拉远视角才能看到完整机器人；举手动作时手臂不可见；流水线重建后各部件散开、手臂/头部与身体分离。
+
+**根因**：`electronbot.xml` 中的 inline mesh 顶点使用毫米单位，但缺少全局缩放。MuJoCo 按米解析后模型被放大约 1000 倍（`stat.extent ≈ 177` 米）。`base_link` 的 `pos="0 0 47.0"` 将底座底部对齐至地面，但 177 米的巨大身体 mesh 把手臂包在里面，且默认相机距离对如此巨大的模型而言过近。简单从 mesh bounds 直接计算位置会进一步导致部件散开，因为原始 XML 中的位置是人工调参的结果，不是自动推导的。
+
+**修复状态**：✅ 已根治（2026-07-09 ~ 2026-07-10）。
+
+- 创建 `scripts/build_electronbot_xml.py`：从 5 个 STL 文件生成 `electronbot.xml`，自动对顶点 ×0.001（mm → m），并补充关节/执行器/传感器/keyframe。
+- body/head/arm 的 body 原点放在父 body 外表面的连接点（腰/脖子/肩），再用 `geom pos` 偏移移动 mesh，使相邻部件视觉上相接：
+  - `base_link` pos `0 0 0.047`；mesh 底面在 z=0
+  - `body` pos `0 0 0.015`（腰关节，base 顶面）；`body_geom` pos `0 0 0.004`，使 body 底面与 waist 重合
+  - `head` pos `0 0 0.0441`（脖子关节，body 顶面）；`head_geom` pos `0 0 -0.017`，使 head 底面与 neck 重合
+  - `left_arm` pos `-0.0148 0 0.0441`（左肩关节，body 顶面左侧）；`left_arm_geom` pos `0 0 -0.0178`，使 arm 顶面与 shoulder 重合；使用 `right_arm.stl` mesh（向负 x 延伸）
+  - `right_arm` pos `0.0148 0 0.0441`（右肩关节）；`right_arm_geom` pos `0 0 -0.0178`；使用 `left_arm.stl` mesh（向正 x 延伸）
+- 物理参数按 1000 倍比例降低：`damping` 4.0→0.004、`armature` 0.1→0.0001、`frictionloss` 0.5→0.0005、执行器 `kp`/`kv` 降低 1000 倍。
+
+缩放后模型参数（验证于 `electronbot_scene.xml`）：
+- `stat.extent = 0.219`（21.9 cm）
+- `stat.center = [0, 0, 0.069]`（6.9 cm 高）
+- `body_inertia` 从 10¹ 量级降到 10⁻⁵（符合小型机器人量级）
+- 各 mesh 世界边界框相接：base[0,0.062] → body[0.062,0.1061] → head[0.1061,0.1545]；手臂 top 在 0.1061，x 分别向左右延伸
+
+> 注意：当前 `env.py` 中的自适应相机代码仍然保留；由于模型已正确缩放，启动后相机距离约 0.30 m，可直接看到完整机器人及手臂。若后续调整模型尺寸，可删除自适应逻辑或保留作为兜底。
+
+> **重建命令**：
+> ```bash
+> python3 scripts/build_electronbot_xml.py
+> ```
+
+### 15.2 关节/执行器名称不匹配导致 `(0,)` 广播错误
+
+**现象**：发送工具请求后报错 `ValueError: operands could not be broadcast together with shapes (0,) (6,)`，机器人完全不动。
+
+**根因**：`env.py` 中硬编码的关节名称（`joint_rp`, `joint_rr`, ...）与 `electronbot.xml` 中实际命名不一致。XML 使用 `right_pitch_joint` / `act_right_pitch` 等完整名称，`env.py` 中一个也匹配不上 → `_joint_ids` 为空 → `_qpos_addr` 为 `(0,)`。
+
+**修复**（`env.py`，2026-07-09）：将全部 6 组关节/执行器名称改为 XML 实际命名：
+
+| 原名称（错误） | XML 实际名称 |
+|---|---|
+| `joint_rp` / `act_rp` | `right_pitch_joint` / `act_right_pitch` |
+| `joint_rr` / `act_rr` | `right_roll_joint` / `act_right_roll` |
+| `joint_lp` / `act_lp` | `left_pitch_joint` / `act_left_pitch` |
+| `joint_lr` / `act_lr` | `left_roll_joint` / `act_left_roll` |
+| `joint_body` | `body_joint` |
+| `joint_head` | `head_joint` |
+
+### 15.3 舵机安全范围误报警（浮点漂移）
+
+**现象**：每次动作执行日志中出现 "舵机 2 角度 -1 超出安全范围 [0, 180], 已裁剪到 0"。
+
+**根因**：`clamp_servo_target()` 使用 `int()` 截断浮点数，仿真后关节角度漂移到 `-0.01°` 时 `int(-0.01) = -1` 触发越界警告，实际并非真正的超出安全范围。
+
+**修复**（`env.py`，2026-07-09）：`int(angle)` → `round(angle)`，`round(-0.01) = 0` 在位范围内，不再误报。
+
+### 15.4 Web 调试面板 `onclick`/`data-*` 引号冲突
+
+**现象**：Web 面板点击"发送"按钮报 `JSON.parse` 错误或无法发送。
+
+**根因**：`JSON.stringify()` 生成的 `"` 与 HTML 属性的 `"` 分隔符冲突，导致属性值被截断。
+
+**修复**（`web/mcp-debug-panel.html`，2026-07-09）：
+- 弃用所有 `onclick` 内联处理，改用 `data-*` 属性 + 容器级事件委托
+- `data-args` 属性使用单引号 `'` 分隔，与 JSON 的 `"` 不冲突
+
+---
+
+## 16. 变更记录
 
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|---------|------|
 | v1.0 | 2026-07-04 | 初版：MCP Bridge 协议层详细设计，包含架构、验证方法、交付物清单 | 架构组 |
 | v1.1 | 2026-07-04 | 补充软件工程规范章节：接口设计、数据模型、错误处理、配置管理、日志与可观测性、风险评估 | 架构组 |
+| v1.2 | 2026-07-09 | 扩充 §3.3 手动验证：新增 Web 调试面板、websocat 使用指南、常用测试命令速查表、扁平调试格式说明；新增 §15 Known Issues：MuJoCo Viewer 初始视角过近问题及修复方案 | - |
+| v2.2 | 2026-07-09 | **Phase 4 仿真端验证通过**（§3.4.11 #1~#11 ✅）；§4 交付物新增 `web/mcp-debug-panel.html`；`mcp_server.py` 增加接收数据实时打印；`env.py` 修复关节/执行器名称不匹配（`joint_rp`→`right_pitch_joint`）、`step_simulation` 增加 viewer 同步、`clamp_servo_target` `int`→`round`；§15 新增 3 个 Known Issues | - |
+| v2.3 | 2026-07-10 | 修正 `scripts/build_electronbot_xml.py` 组装逻辑：body/head/arm 采用"连接点 + geom offset"策略，使 base→body→head 相邻 mesh 边界框相接、左右手臂与肩平齐；§15.1 更新最终修复细节与边界框验证数据 | - |

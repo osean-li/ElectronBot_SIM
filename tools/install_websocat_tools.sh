@@ -26,12 +26,29 @@ echo "  ElectronBot 工具安装"
 echo "=============================="
 echo ""
 
-# ---- 1. 系统更新 + apt 工具 ----
-log_info "更新软件源..."
-sudo apt update -qq
+# ---- 1. apt 工具 ----
+NEED_APT=false
+NEED_INSTALL=()
 
-log_info "安装系统工具..."
-sudo apt install -y wget minicom
+if ! command -v minicom &>/dev/null; then
+    NEED_APT=true
+    NEED_INSTALL+=("minicom")
+fi
+
+# 仅当没有本地 websocat 时才需要 wget 下载
+WEBSOCAT_BIN="websocat_amd64-linux"
+if [ ! -f "${SCRIPT_DIR}/${WEBSOCAT_BIN}" ] && ! command -v wget &>/dev/null; then
+    NEED_APT=true
+    NEED_INSTALL+=("wget")
+fi
+
+if [ "$NEED_APT" = true ]; then
+    log_info "安装系统工具: ${NEED_INSTALL[*]}..."
+    sudo apt update -qq
+    sudo apt install -y "${NEED_INSTALL[@]}"
+else
+    log_info "系统工具已就绪，跳过 apt 安装"
+fi
 
 # ---- 2. esptool ----
 log_info "安装 esptool（固件烧录）..."
