@@ -143,6 +143,37 @@ render_cache/
 simulation_cache/
 
 # ============================================================
+# STEP→MJCF 中间文件 (GLB缓存、STL零件、生成的MJCF)
+# ============================================================
+assets/meshes/*.glb
+assets/meshes/*_clipped.stl
+assets/meshes/*_shell.stl
+assets/meshes/*_mount.stl
+assets/meshes/step_parts/
+assets/mjcf/electronbot_full_arm_meters.xml
+assets/mjcf/electronbot_split.xml
+assets/mjcf/electronbot_split_meters.xml
+assets/mjcf/electronbot_step_meters.xml
+
+# ============================================================
+# 调试/探索脚本 & 临时输出
+# ============================================================
+diag_compare.py
+scripts/build_meters_xml.py
+scripts/fk_probe_raise.py
+scripts/gen_raise_gif.py
+scripts/probe_arm_tip.py
+scripts/probe_hand_height.py
+scripts/probe_mesh_ax.py
+scripts/rebuild_robot_model.py
+scripts/render_candidates.py
+scripts/render_candidates_v2.py
+scripts/verify_arm_fix.py
+gif_output/
+tmp/
+web/serve.py
+
+# ============================================================
 # Sensitive Config & Secrets (环境变量、密钥)
 # ============================================================
 .env

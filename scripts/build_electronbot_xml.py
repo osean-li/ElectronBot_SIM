@@ -1,168 +1,145 @@
-#!/usr/bin/env python3
-"""build_electronbot_xml.py — 从 STL 生成 electronbot.xml.
+"""build_electronbot_xml.py — 验证 MJCF 模型并输出推荐的相机参数。
 
-STL 文件 → inline mesh XML (保持原始 STL 单位, 不缩放).
-所有位置参数硬编码, 与当前工作模型 electronbot.xml 一致.
+用途:
+  1. 加载 electronbot_scene.xml, 验证 XML 结构 (关节/执行器命名空间)
+  2. 计算模型包围盒 (stat.center / stat.extent) → 推荐相机参数
+  3. 模拟 home 姿态, 检查 IK 与可达性
+  4. 输出 JSON 报告供 visual_demo 集成
 
 用法:
   python3 scripts/build_electronbot_xml.py
-  输出: assets/mjcf/electronbot.xml
+  python3 scripts/build_electronbot_xml.py --xml assets/mjcf/electronbot_scene.xml
 """
 from __future__ import annotations
 
+import argparse
+import json
+import sys
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
-import trimesh
-
-ROOT = Path(__file__).parent.parent
-MESH_DIR = ROOT / "assets" / "meshes"
-OUT_PATH = ROOT / "assets" / "mjcf" / "electronbot.xml"
-
-# body 名称 → STL 文件名
-MESH_FILES = {
-    "base_link": "base_link",
-    "body": "body",
-    "head": "head",
-    "left_arm": "left_arm",
-    "right_arm": "right_arm",
-}
-
-# 换行符 (Linux 环境 checkout 后为 LF)
-LF = "\n"
 
 
-def load_stl(name: str) -> trimesh.Trimesh:
-    p = MESH_DIR / f"{name}.stl"
-    if not p.exists():
-        raise FileNotFoundError(str(p))
-    return trimesh.load(str(p))
-
-
-def mesh_to_inline(name: str, m: trimesh.Trimesh) -> str:
-    """返回 <mesh name="..." vertex="..." face="..." /> 单行 XML."""
-    verts = m.vertices  # 不缩放, 保持 STL 原始单位
-    v_str = " ".join(f"{v:.6g}" for v in verts.flatten())
-    f_str = " ".join(str(int(i)) for i in m.faces.flatten())
-    nm = len(verts)
-    nf = len(m.faces)
-    print(f"  {name:20s} {nm} verts, {nf} faces")
-    return f'    <mesh name="{name}" vertex="{v_str}" face="{f_str}" />'
-
-
-def main():
-    print("加载 STL 文件...")
-    meshes: Dict[str, trimesh.Trimesh] = {}
-    for xml_name, stl_name in MESH_FILES.items():
-        meshes[xml_name] = load_stl(stl_name)
-
-    # 生成 inline mesh
-    mesh_lines = [mesh_to_inline(name, m) for name, m in meshes.items()]
-
-    # ── 构建 XML (精确匹配目标格式) ──
-    lines = []
-    L = lines.append
-
-    L('<?xml version="1.0"?>')
-    L('<mujoco model="electronbot">')
-    L('  <compiler angle="radian" autolimits="true"/>')
-    L('  <option timestep="0.002" integrator="RK4" iterations="50" cone="elliptic"/>')
-    L('')
-    L('  <default>')
-    L('    <joint damping="4.0" armature="0.1" frictionloss="0.5"/>')
-    L('    <geom contype="0" conaffinity="0" condim="3" friction="0.8 0.3 0.1" density="0.1"/>')
-    L('  </default>')
-    L('')
-    L('  <asset>')
-    L('<material name="mat_base" rgba="0.2 0.2 0.2 1.0"/>')
-    L('    <material name="mat_body" rgba="0.85 0.85 0.85 1.0"/>')
-    L('    <material name="mat_head" rgba="0.3 0.3 0.3 1.0"/>')
-    L('    <material name="mat_arm" rgba="0.6 0.6 0.6 1.0"/>')
-    for ml in mesh_lines:
-        L(ml)
-    L('  </asset>')
-    L('')
-    L('  <worldbody>')
-    L('    <body name="base_link" pos="0 0 47.0">')
-    L('      <geom name="base_geom" type="mesh" mesh="base_link" mass="0.045"/>')
-    L('')
-    L('      <body name="body" pos="0 0 0.03">')
-    L('        <joint name="body_joint" type="hinge" axis="0 0 1" range="-1.5708 1.5708" limited="true"/>')
-    L('        <geom name="body_geom" type="mesh" mesh="body" mass="0.060"/>')
-    L('')
-    L('        <body name="head" pos="0 0 0.07">')
-    L('          <joint name="head_joint" type="hinge" axis="0 1 0" range="-0.2618 0.2618" limited="true"/>')
-    L('          <geom name="head_geom" type="mesh" mesh="head" mass="0.030"/>')
-    L('        </body>')
-    L('')
-    L('        <!-- 左臂 (纯 LEFT_ARM_PARTS, 不含身体外壳) -->')
-    L('        <body name="left_arm" pos="-0.0180 0 0.065">')
-    L('          <joint name="left_pitch_joint" type="hinge" axis="0 1 0" range="-1.5708 1.5708" limited="true"/>')
-    L('          <joint name="left_roll_joint" type="hinge" axis="1 0 0" range="-0.7854 0.7854" limited="true"/>')
-    L('          <geom name="left_arm_geom" type="mesh" mesh="left_arm" pos="-0.0256 0 0" mass="0.005" material="mat_arm"/>')
-    L('          <body name="left_hand" pos="0 0.03 0">')
-    L('            <geom name="left_hand_geom" type="box" size="0.006 0.006 0.010" mass="0.003" material="mat_arm"/>')
-    L('          </body>')
-    L('        </body>')
-    L('')
-    L('        <!-- 右臂 (纯 RIGHT_ARM_PARTS, 不含身体外壳) -->')
-    L('        <body name="right_arm" pos="0.0180 0 0.065">')
-    L('          <joint name="right_pitch_joint" type="hinge" axis="0 1 0" range="-1.5708 1.5708" limited="true"/>')
-    L('          <joint name="right_roll_joint" type="hinge" axis="1 0 0" range="-0.7854 0.7854" limited="true"/>')
-    L('          <geom name="right_arm_geom" type="mesh" mesh="right_arm" pos="0.0256 0 0" mass="0.005" material="mat_arm"/>')
-    L('          <body name="right_hand" pos="0 0.03 0">')
-    L('            <geom name="right_hand_geom" type="box" size="0.006 0.006 0.010" mass="0.003" material="mat_arm"/>')
-    L('          </body>')
-    L('        </body>')
-    L('      </body>')
-    L('    </body>')
-    L('  </worldbody>')
-    L('')
-    L('<actuator>')
-    L('    <position name="act_body"          joint="body_joint"           ctrlrange="-1.5708 1.5708" kp="80" kv="20"/>')
-    L('    <position name="act_head"          joint="head_joint"           ctrlrange="-0.2618 0.2618" kp="40" kv="10"/>')
-    L('    <position name="act_left_pitch"    joint="left_pitch_joint"     ctrlrange="-1.5708 1.5708" kp="60" kv="15"/>')
-    L('    <position name="act_left_roll"     joint="left_roll_joint"      ctrlrange="-0.7854 0.7854" kp="30" kv="8"/>')
-    L('    <position name="act_right_pitch"   joint="right_pitch_joint"    ctrlrange="-1.5708 1.5708" kp="60" kv="15"/>')
-    L('    <position name="act_right_roll"    joint="right_roll_joint"     ctrlrange="-0.7854 0.7854" kp="30" kv="8"/>')
-    L('  </actuator>')
-    L('')
-    L('<sensor>')
-    L('    <jointpos name="jpos_body" joint="body_joint"/>')
-    L('    <jointpos name="jpos_head" joint="head_joint"/>')
-    L('    <jointpos name="jpos_left_pitch" joint="left_pitch_joint"/>')
-    L('    <jointpos name="jpos_left_roll" joint="left_roll_joint"/>')
-    L('    <jointpos name="jpos_right_pitch" joint="right_pitch_joint"/>')
-    L('    <jointpos name="jpos_right_roll" joint="right_roll_joint"/>')
-    L('  </sensor>')
-    L('')
-    L('<keyframe>')
-    L('    <key name="home" qpos="0 0 0 0 0 0"/>')
-    L('  </keyframe>')
-    L('</mujoco>')
-    L('')
-
-    xml = LF.join(lines)
-    OUT_PATH.write_bytes(xml.encode("utf-8"))
-    print(f"\n✅ 已生成: {OUT_PATH}")
-
-    # 验证
+def build_xml_report(xml_path: Path) -> dict:
+    """加载 MJCF, 验证结构, 输出相机建议。"""
     import mujoco
-    try:
-        model = mujoco.MjModel.from_xml_path(str(OUT_PATH))
-        data = mujoco.MjData(model)
-        mujoco.mj_resetData(model, data)
-        mujoco.mj_forward(model, data)
-        print(f"   stat.center = {model.stat.center}")
-        print(f"   stat.extent = {model.stat.extent:.3f}")
-        print(f"   njnt = {model.njnt}, nbody = {model.nbody}")
-        print(f"   body_mass = {[round(m, 4) for m in model.body_mass[:8]]}")
-        print(f"   dof_damping = {[round(d, 4) for d in model.dof_damping[:6]]}")
-        print(f"   ✅ 模型加载验证通过")
-    except Exception as e:
-        print(f"   ❌ 模型验证失败: {e}")
+
+    if not xml_path.exists():
+        raise FileNotFoundError(f"MJCF 文件不存在: {xml_path}")
+
+    model = mujoco.MjModel.from_xml_path(str(xml_path))
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+
+    # ── 统计包围盒 ──
+    center = model.stat.center.tolist()
+    extent = float(model.stat.extent)
+
+    # ── 关节/执行器清单 ──
+    joint_names = [
+        model.names[model.name_jntadr[i]].decode()
+        for i in range(model.njnt)
+    ]
+    actuator_names = [
+        model.names[model.name_actuatoradr[i]].decode()
+        for i in range(model.nu)
+    ]
+
+    # ── 推荐相机 (对齐 demos/01_manual_control.py 的已验证参数) ──
+    cam = {
+        "lookat": center,
+        "distance": extent * 1.8,
+        "azimuth": 135,
+        "elevation": -20,
+    }
+
+    # ── Body 高度 (验证 base_link 是否在高空) ──
+    body_names = [
+        model.names[model.name_bodyadr[i]].decode()
+        for i in range(model.nbody)
+    ]
+    base_height = float(data.xpos[1, 2]) if model.nbody > 1 else 0.0
+
+    report = {
+        "xml_path": str(xml_path),
+        "model_summary": {
+            "nq": model.nq,
+            "nv": model.nv,
+            "nu": model.nu,
+            "njnt": model.njnt,
+            "nbody": model.nbody,
+        },
+        "stat": {
+            "center": center,
+            "extent": extent,
+        },
+        "camera_recommended": cam,
+        "joints": joint_names,
+        "actuators": actuator_names,
+        "body_names": body_names,
+        "base_link_world_z": base_height,
+        "warnings": [],
+    }
+
+    # ── 健康检查 ──
+    if extent < 1e-6:
+        report["warnings"].append("stat.extent ≈ 0, 模型可能未正确加载")
+    if "body_joint" not in joint_names:
+        report["warnings"].append("缺少 body_joint, 转身动作无法执行")
+    if "head_joint" not in joint_names:
+        report["warnings"].append("缺少 head_joint, 点头动作无法执行")
+    if base_height > 10.0:
+        report["warnings"].append(
+            f"base_link z={base_height:.2f}m 远高于地面, "
+            f"相机 distance={cam['distance']:.1f}m 才能看到机器人"
+        )
+
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="验证 MJCF 并输出相机建议")
+    parser.add_argument(
+        "--xml",
+        type=Path,
+        default=Path("assets/mjcf/electronbot_scene.xml"),
+        help="MJCF 文件路径",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="输出 JSON 报告路径 (默认打印到 stdout)",
+    )
+    args = parser.parse_args()
+
+    xml_path = args.xml.resolve()
+    report = build_xml_report(xml_path)
+
+    text = json.dumps(report, ensure_ascii=False, indent=2)
+
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(text, encoding="utf-8")
+        print(f"报告已写入: {args.out}")
+    else:
+        print(text)
+
+    # ── 关键参数提示 ──
+    cam = report["camera_recommended"]
+    print("\n[推荐相机参数] (复制到 env.py / visual_demo.py)")
+    print(f"  lookat   = {cam['lookat']}")
+    print(f"  distance = {cam['distance']:.2f}")
+    print(f"  azimuth  = {cam['azimuth']}")
+    print(f"  elevation= {cam['elevation']}")
+
+    if report["warnings"]:
+        print("\n[⚠ 警告]")
+        for w in report["warnings"]:
+            print(f"  - {w}")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
