@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger("electronbot_sim.mcp_server")
@@ -178,13 +179,15 @@ class McpWebSocketServer:
 
 
 def run_server(host: str = "localhost", port: int = 8080,
-               render_mode: Optional[str] = "human") -> None:
+               render_mode: Optional[str] = "human",
+               xml_path: Optional[str] = None) -> None:
     """便捷启动函数.
 
     参数:
         host:        监听地址
         port:        监听端口
         render_mode: 渲染模式, "human" (默认) / "rgb_array" / None
+        xml_path:    自定义 MJCF XML 文件路径 (相对于项目根目录)
     """
     import socket
 
@@ -209,7 +212,14 @@ def run_server(host: str = "localhost", port: int = 8080,
     try:
         # MCP 调试服务器: 使用项目主场景 electronbot_scene.xml (含机器人本体 + 地面 + 灯光)
         # env.py 默认的 scene_tabletop.xml 是桌面抓取任务场景, MCP 调试不需要桌面/物体
-        env = ElectronBotEnv(render_mode=render_mode, model_file="electronbot_scene.xml")
+        if xml_path:
+            # 使用自定义 XML 文件 - 设置环境变量让 env 使用完整路径
+            import os
+            xml_full_path = os.path.abspath(xml_path)
+            os.environ["ELECTRONBOT_SIM_ASSETS_PATH"] = str(Path(xml_full_path).parent)
+            env = ElectronBotEnv(render_mode=render_mode, model_file=Path(xml_full_path).name, camera_distance=None)
+        else:
+            env = ElectronBotEnv(render_mode=render_mode, model_file="electronbot_full_arm_meters.xml", camera_distance=None)
         # 主动触发一次渲染, 确保 MuJoCo 窗口在 WebSocket 监听前弹出
         # (human 模式下创建 launch_passive viewer, 显示 home 姿态)
         env.render()
@@ -236,5 +246,6 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="localhost", help="监听地址")
     parser.add_argument("--port", type=int, default=8080, help="监听端口")
     parser.add_argument("--render", default="human", help="渲染模式: human (默认) / rgb_array")
+    parser.add_argument("--xml", default=None, help="自定义 MJCF XML 文件路径 (相对于项目根目录)")
     args = parser.parse_args()
-    run_server(args.host, args.port, args.render)
+    run_server(args.host, args.port, args.render, xml_path=args.xml)

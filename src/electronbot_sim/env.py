@@ -225,6 +225,9 @@ class ElectronBotEnv(gym.Env):
         self._mujoco = mujoco  # 保存引用, 供 actions 等模块复用
         self.model = mujoco.MjModel.from_xml_path(str(model_path))
         self.data = mujoco.MjData(self.model)
+
+        # 可选相机距离 (None=自动 extent*1.8)
+        self._camera_distance = kwargs.get("camera_distance", None)
         self._joint_min = JOINT_MIN
         self._joint_max = JOINT_MAX
 
@@ -403,6 +406,20 @@ class ElectronBotEnv(gym.Env):
         info = self._build_step_info(current_angles, target_angles)
         truncated = self.step_count >= self.max_episode_steps
         return obs, 0.0, False, truncated, info
+
+    def _compute_scene_camera(self):
+        """根据 model.stat.center / extent 动态计算相机参数。"""
+        import mujoco
+        cam = mujoco.MjvCamera()
+        cam.lookat[:] = self.model.stat.center
+        extent = self.model.stat.extent
+        cam.distance = float(self._camera_distance) if self._camera_distance else 0.25
+        cam.azimuth = 90 if self._camera_distance else 135
+        cam.elevation = -5
+        # 让 lookat 对准模型底部，确保看到地面接触
+        if not self._camera_distance:
+            cam.lookat[2] = 0.01
+        return cam
 
     def render(self):
         """渲染当前帧。rgb_array 返回 (480,480,3) uint8; human 返回 None。"""
@@ -650,8 +667,24 @@ class ElectronBotEnv(gym.Env):
         if self._viewer is None:
             try:
                 import mujoco.viewer
-                # 注: mujoco.viewer.launch_passive 是非阻塞 viewer
                 self._viewer = mujoco.viewer.launch_passive(self.model, self.data)
+                if self._viewer is not None and hasattr(self, '_compute_scene_camera'):
+                    cam = self._compute_scene_camera()
+                    logger.info("setting camera: dist=%.0f az=%.0f el=%.0f lookat=(%.0f,%.0f,%.0f)",
+                                cam.distance, cam.azimuth, cam.elevation,
+                                cam.lookat[0], cam.lookat[1], cam.lookat[2])
+                    self._viewer.cam.lookat[:] = cam.lookat
+                    self._viewer.cam.distance = cam.distance
+                    self._viewer.cam.azimuth = cam.azimuth
+                    self._viewer.cam.elevation = cam.elevation
+                    # 打印 arm geom 的世界位置, 确认有手臂
+                    for gn in ['left_arm_geom', 'right_arm_geom']:
+                        gid = mujoco.mj_name2id(self.model, 5, gn)
+                        if gid >= 0:
+                            pos = self.data.geom_xpos[gid]
+                            mid = self.model.geom_dataid[gid]
+                            vnum = self.model.mesh_vertnum[mid]
+                            logger.info("  %s: pos=(%.0f,%.0f,%.0f) verts=%d", gn, pos[0], pos[1], pos[2], vnum)
             except Exception as e:
                 logger.warning("human viewer 初始化失败: %s, 回退 rgb_array", e)
                 self.render_mode = "rgb_array"
@@ -659,9 +692,10 @@ class ElectronBotEnv(gym.Env):
                 return
         if self._viewer is not None:
             try:
-                self._viewer.sync()
-            except Exception:
-                pass
+                with self._viewer.lock():
+                    self._viewer.sync()
+            except Exception as e:
+                logger.error("viewer.sync 异常: %s", e)
 
     # ================================================================
     #  便捷方法 (供 Task / Actions 模块复用)
@@ -724,6 +758,21 @@ class ElectronBotEnv(gym.Env):
         返回: True 若仿真状态合法 (无 NaN/爆炸), False 表示需要 reset.
         """
         substeps = substeps or max(1, int(self.dt / self.model.opt.timestep))
+        # human 模式: 用 viewer.lock() 上下文管理器串行化 mj_step + sync。
+        # 注: MuJoCo 3.x viewer.lock 是上下文管理器函数, 不是 threading.Lock,
+        # 必须用 with viewer.lock(): 而不能手动 .acquire()/.release()。
+        if self.render_mode == "human" and self._viewer is not None:
+            try:
+                with self._viewer.lock():
+                    for _ in range(substeps):
+                        self._mujoco.mj_step(self.model, self.data)
+                    self._viewer.sync()
+            except Exception as e:
+                logger.error("human step/sync 异常: %s", e)
+                self.explosion_reset_count += 1
+                return False
+            return self._check_state_validity()
+        # 非 human 模式: 仅推进物理
         try:
             for _ in range(substeps):
                 self._mujoco.mj_step(self.model, self.data)

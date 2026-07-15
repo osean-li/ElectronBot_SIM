@@ -421,6 +421,39 @@ class McpSimBridge:
         self._moving = False
         self.env.set_moving_state(False)
 
+    def _move_to_joints(self, joint_targets_deg: np.ndarray, time_ms: int) -> None:
+        """6 关节联动缓动 (关节空间线性插值), 供 hand_action 举手/放手 使用.
+
+        与 _move_all_servos 等价, 但直接工作在机械关节角度空间 (度),
+        免去 servo<->joint 反复换算, 并依赖 apply_joint_targets_deg 的限位裁剪.
+        """
+        joint_targets_deg = np.asarray(joint_targets_deg, dtype=np.float32).reshape(-1)
+        if joint_targets_deg.shape[0] != 6:
+            logger.error("_move_to_joints: 维度不匹配 %s", joint_targets_deg.shape)
+            return
+
+        current_joint = self.env._get_joint_angles_deg()
+
+        # time_ms <= 10 -> 直接到位
+        if time_ms <= 10:
+            self.env.apply_joint_targets_deg(joint_targets_deg)
+            self.env.step_simulation()
+            return
+
+        # 线性插值 (10ms 步进, 对齐固件 MoveServos)
+        steps = max(1, time_ms // 10)
+        self._moving = True
+        self.env.set_moving_state(True)
+        for step in range(1, steps + 1):
+            t = step / steps
+            interp = current_joint + (joint_targets_deg - current_joint) * t
+            self.env.apply_joint_targets_deg(interp)
+            if not self.env.step_simulation():
+                logger.warning("仿真状态非法, 中断插值")
+                break
+        self._moving = False
+        self.env.set_moving_state(False)
+
     def _step_sim(self, joint_targets_deg: np.ndarray) -> None:
         """直接设置机械关节目标并推进一步仿真 (单步, 供 servo_move 等使用).
 
@@ -458,30 +491,30 @@ class McpSimBridge:
         # 根据动作类型构造目标
         # 索引: 0=RP 1=RR 2=LP 3=LR 4=BODY 5=HEAD
         for _ in range(times):
-            if action == 1:  # 举手
-                targets = current_servo.copy()
-                if hand in (1, 3):  # 左手
-                    targets[2] = 180  # LP 上举
-                if hand in (2, 3):  # 右手
-                    targets[0] = 0    # RP 上举 (反向, 0=最高)
-                self._move_all_servos(targets, speed)
+            if action == 1:  # 举手: full_arm 模型手臂朝前(+Y), 需 roll 关节(LR/RR)绕 X 轴抬手; pitch 仅拧转
+                targets_joint = current_joint.copy()
+                if hand in (1, 3):  # 左手: roll 抬手
+                    targets_joint[3] = 90   # LR +90° (关节限幅 ±45°, 实际抬升 ~21mm)
+                if hand in (2, 3):  # 右手: roll 抬手
+                    targets_joint[1] = 90   # RR +90° 抬升
+                self._move_to_joints(targets_joint, speed)
 
-            elif action == 2:  # 放手
-                targets = current_servo.copy()
+            elif action == 2:  # 放手: roll 关节回正
+                targets_joint = current_joint.copy()
                 if hand in (1, 3):
-                    targets[2] = 0    # LP 下放
+                    targets_joint[3] = 0   # LR 回正
                 if hand in (2, 3):
-                    targets[0] = 180  # RP 下放 (反向, 180=最低)
-                self._move_all_servos(targets, speed)
+                    targets_joint[1] = 0   # RR 回正
+                self._move_to_joints(targets_joint, speed)
 
             elif action == 3:  # 挥手
                 # 挥手: 抬起 → 摆动 → 放下
                 # 起始位: 抬手
                 raise_targets = current_servo.copy()
                 if hand in (1, 3):
-                    raise_targets[2] = 150  # LP 抬起位
+                    raise_targets[3] = 90   # LR 抬起位 (roll)
                 if hand in (2, 3):
-                    raise_targets[0] = 30   # RP 抬起位
+                    raise_targets[1] = 90   # RR 抬起位 (roll)
                 self._move_all_servos(raise_targets, speed)
 
                 # 摆动 (roll 来回)
@@ -500,11 +533,11 @@ class McpSimBridge:
                 amount = min(amount, 40)  # 固件上限
                 targets = current_servo.copy()
                 if hand in (1, 3):
-                    # LP 上下拍打
-                    targets[2] = 90 + amount
+                    # LR roll 上下拍打
+                    targets[3] = 90 + amount
                 if hand in (2, 3):
-                    # RP 上下拍打 (反向)
-                    targets[0] = 90 - amount
+                    # RR roll 上下拍打 (反向)
+                    targets[1] = 90 - amount
                 self._move_all_servos(targets, speed)
                 # 回到原位
                 self._move_all_servos(current_servo, speed)
