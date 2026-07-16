@@ -191,17 +191,39 @@ def run_server(host: str = "localhost", port: int = 8080,
     """
     import socket
 
-    # ── 预检端口可用性, 避免创建 MuJoCo/GLFW 资源后再发现端口被占用 ──
+    # ── 预检端口可用性, 自动 kill 占用进程 ──
     # (一旦创建 launch_passive viewer, 后台 GLFW 线程很难干净清理, 会段错误)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((host, port))
     except OSError:
-        print(f"❌ 端口 {port} 已被占用, 请先关闭占用该端口的进程:")
-        print(f"   lsof -i :{port}")
-        print(f"   或 kill $(lsof -t -i :{port})")
-        return
+        import subprocess
+        print(f"⚠️  端口 {port} 已被占用, 正在自动关闭占用进程...")
+        try:
+            pids = subprocess.check_output(
+                ["lsof", "-t", "-i", f":{port}"], text=True
+            ).strip().split("\n")
+            for pid in pids:
+                pid = pid.strip()
+                if pid:
+                    subprocess.run(["kill", pid], check=False)
+                    print(f"   已 kill PID {pid}")
+            import time; time.sleep(0.5)
+        except Exception as e:
+            print(f"   自动关闭失败: {e}")
+            print(f"   请手动执行: kill $(lsof -t -i :{port})")
+            return
+        # 重试绑定
+        try:
+            sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock2.bind((host, port))
+            sock2.close()
+            print(f"✅ 端口 {port} 已释放, 继续启动...")
+        except OSError:
+            print(f"❌ 端口 {port} 仍被占用, 请手动处理")
+            return
     finally:
         sock.close()
 
@@ -246,6 +268,6 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="localhost", help="监听地址")
     parser.add_argument("--port", type=int, default=8080, help="监听端口")
     parser.add_argument("--render", default="human", help="渲染模式: human (默认) / rgb_array")
-    parser.add_argument("--xml", default=None, help="自定义 MJCF XML 文件路径 (相对于项目根目录)")
+    parser.add_argument("--xml", default="assets/mjcf/electronbot_step_meters.xml", help="MJCF XML 文件路径 (相对于项目根目录)")
     args = parser.parse_args()
     run_server(args.host, args.port, args.render, xml_path=args.xml)

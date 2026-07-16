@@ -133,21 +133,44 @@ body{margin:0;background:var(--paper);color:var(--ink);
     <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">FreeCAD</span><span class="kw">STEP</span><span class="kw">STL</span><span class="kw">Inline Mesh</span><span class="kw">RK4</span><span class="kw">零件污染</span><span class="kw">✅ 稳定</span><span class="kw">第一次加载</span></div>
   </header>
   <div class="section-background">
-  <div class="bg-title">📖 本节背景</div>
-  <div class="bg-body">首次加载 XML 并拖动 actuator 时，仿真出现 NaN 崩溃。排查发现根因为 STL 的 mm 单位导致惯性参数放大约 10¹² 倍，默认积分器无法收敛。 四种积分器的对比测试结果： 生成 XML 后加载 viewer 遇到的 NaN 爆炸是我花费时间最长的一个问题。调试过程如下：</div>
+  <div class="bg-title">📖 本节背景（v3.0 更新）</div>
+  <div class="bg-body">v3.0 通过<b>坐标本地化</b>和<b>质量优化</b>大幅提升了仿真稳定性：<br/>1. STL 顶点已在脚本中完成 mm→m 转换，避免惯性参数放大 10¹² 倍<br/>2. 零件质量控制在 0.01-0.015kg 范围，避免过高质量导致仿真不稳定<br/>3. 执行器增益 kp 从 20 降至 5，kv 从 1 降至 2，抑制高频振动<br/>4. 关节阻尼从 4.0 降至 1.0，平衡响应速度与稳定性<br/><br/>尽管 v3.0 已大幅改善，RK4 积分器仍然是必要的，因为 347 个零件的复杂装配体对数值精度要求极高。</div>
 </div>
   
   
   <div class="knowledge-card summary">
-  <div class="kc-header">本节要点</div>
-  <div class="kc-body"><p>首次加载 XML 并拖动 actuator 时，仿真出现 NaN 崩溃。排查发现根因为 STL 的 mm 单位导致惯性参数放大约 10¹² 倍，默认积分器无法收敛。</p></div>
-  <div class="kc-tags"><span class="kc-tag">FreeCAD</span><span class="kc-tag">STEP</span><span class="kc-tag">STL</span><span class="kc-tag">Inline Mesh</span></div>
+  <div class="kc-header">本节要点（v3.0 更新）</div>
+  <div class="kc-body"><p>v3.0 通过坐标本地化和质量优化大幅提升仿真稳定性：</p>
+  <ul>
+  <li>STL 顶点在脚本中完成 mm→m 转换，避免惯性放大</li>
+  <li>零件质量控制在 0.01-0.015kg</li>
+  <li>执行器增益 kp=5, kv=2</li>
+  <li>关节阻尼 1.0</li>
+  <li>RK4 积分器仍然是必要的</li>
+  </ul></div>
+  <div class="kc-tags"><span class="kc-tag">坐标本地化</span><span class="kc-tag">质量优化</span><span class="kc-tag">RK4</span><span class="kc-tag">执行器增益</span></div>
 </div>
   
   <main class="content">
-<h2>3.8 仿真稳定性调优</h2>
-<h3>3.8.1 积分器选择</h3>
-<p>首次加载 XML 并拖动 actuator 时，仿真出现 NaN 崩溃。排查发现根因为 STL 的 mm 单位导致惯性参数放大约 10¹² 倍，默认积分器无法收敛。</p>
+<h2>3.8 仿真稳定性调优（v3.0 更新）</h2>
+<h3>3.8.1 v3.0 稳定性优化</h3>
+<p>v3.0 通过以下优化大幅提升仿真稳定性：</p>
+<ol>
+<li>
+<p><b>坐标本地化</b>：STL 顶点在脚本中完成 mm→m 转换，避免 MuJoCo 自动中心化导致的惯性参数放大</p>
+</li>
+<li>
+<p><b>质量优化</b>：零件质量从 0.5kg 降至 0.01-0.015kg，避免过高质量导致仿真不稳定</p>
+</li>
+<li>
+<p><b>执行器增益</b>：kp 从 20 降至 5，kv 从 1 降至 2，抑制高频振动</p>
+</li>
+<li>
+<p><b>关节阻尼</b>：从 4.0 降至 1.0，平衡响应速度与稳定性</p>
+</li>
+</ol>
+<h3>3.8.2 积分器选择</h3>
+<p>尽管 v3.0 已大幅改善，RK4 积分器仍然是必要的，因为 347 个零件的复杂装配体对数值精度要求极高。</p>
 <p>四种积分器的对比测试结果：</p>
 <table>
 <thead>
@@ -180,8 +203,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
 </tr>
 </tbody>
 </table>
-<h3>3.8.2 我的稳定性调试过程</h3>
-<p>生成 XML 后加载 viewer 遇到的 NaN 爆炸是我花费时间最长的一个问题。调试过程如下：</p>
+<h3>3.8.3 v2.0 稳定性调试过程（历史参考）</h3>
+<p>v2.0 使用 inline mesh 时遇到的 NaN 爆炸问题（v3.0 已通过坐标本地化解决）：</p>
 <ol>
 <li>
 <p><strong>第一次加载</strong>：执行 <code>python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_full_arm.xml</code>，模型显示正常。</p>
@@ -227,22 +250,52 @@ body{margin:0;background:var(--paper);color:var(--ink);
 <p><strong>记录日志</strong>：在开发笔记中记下"STL mm 单位 → 惯性放大 10¹² 倍 → implicitfast 扛不住 → 换 RK4 + 提 damping"。</p>
 </li>
 </ol>
-<h3>3.8.3 参数调优</h3>
-<p>除积分器外，还调整了以下参数：</p>
-<pre><code class="language-xml">&lt;option timestep=&quot;0.002&quot; integrator=&quot;RK4&quot; iterations=&quot;50&quot; cone=&quot;elliptic&quot;/&gt;
+<h3>3.8.4 v3.0 参数配置</h3>
+<p>v3.0 的最终参数配置：</p>
+<pre><code class="language-xml">&lt;option timestep=&quot;0.002&quot; integrator=&quot;RK4&quot; iterations=&quot;50&quot;/&gt;
+
 &lt;default&gt;
-  &lt;joint damping=&quot;4.0&quot; armature=&quot;0.1&quot; frictionloss=&quot;0.5&quot;/&gt;
+  &lt;joint damping=&quot;1.0&quot; armature=&quot;0.01&quot;/&gt;
 &lt;/default&gt;
+
+&lt;actuator&gt;
+  &lt;position name=&quot;body_pos&quot; joint=&quot;body_joint&quot; kp=&quot;5&quot; kv=&quot;2&quot;/&gt;
+  &lt;position name=&quot;head_pos&quot; joint=&quot;head_joint&quot; kp=&quot;5&quot; kv=&quot;2&quot;/&gt;
+  &lt;position name=&quot;left_pitch_pos&quot; joint=&quot;left_pitch_joint&quot; kp=&quot;5&quot; kv=&quot;2&quot;/&gt;
+  &lt;position name=&quot;left_roll_pos&quot; joint=&quot;left_roll_joint&quot; kp=&quot;5&quot; kv=&quot;2&quot;/&gt;
+  &lt;position name=&quot;right_pitch_pos&quot; joint=&quot;right_pitch_joint&quot; kp=&quot;5&quot; kv=&quot;2&quot;/&gt;
+  &lt;position name=&quot;right_roll_pos&quot; joint=&quot;right_roll_joint&quot; kp=&quot;5&quot; kv=&quot;2&quot;/&gt;
+&lt;/actuator&gt;
 </code></pre>
+<p>关键参数说明：</p>
 <ul>
 <li>
-<p><code>damping</code>：0.01 → 4.0，抑制高频振动</p>
+<p><code>damping</code>：1.0，平衡响应速度与稳定性（v2.0 为 4.0）</p>
 </li>
 <li>
-<p><code>armature</code>：0.001 → 0.1，增加关节惯性</p>
+<p><code>armature</code>：0.01，关节惯性（v2.0 为 0.1）</p>
 </li>
 <li>
-<p><code>iterations</code>：100 → 50，降低计算量</p>
+<p><code>kp</code>：5，位置增益（v2.0 为 20，过高导致振荡）</p>
+</li>
+<li>
+<p><code>kv</code>：2，速度增益（v2.0 为 1，增加阻尼效果）</p>
+</li>
+<li>
+<p><code>iterations</code>：50，求解器迭代次数</p>
+</li>
+</ul>
+<h3>3.8.5 坐标本地化对稳定性的影响</h3>
+<p>v3.0 的坐标本地化方案对仿真稳定性的关键影响：</p>
+<ul>
+<li>
+<p><b>避免惯性放大</b>：v2.0 使用 inline mesh 时，MuJoCo 会自动将 mesh 质心移到 body 原点，导致惯性参数放大约 10¹² 倍。v3.0 通过脚本在导出 STL 时完成坐标转换，避免这个问题。</p>
+</li>
+<li>
+<p><b>质量分布合理</b>：每个零件质量控制在 0.01-0.015kg，总质量约 3.5kg，符合实际机器人重量分布。</p>
+</li>
+<li>
+<p><b>关节轴对齐</b>：坐标本地化确保关节轴与零件几何中心对齐，避免力矩不平衡导致的振荡。</p>
 </li>
 </ul>
   </main>

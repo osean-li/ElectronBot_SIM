@@ -133,14 +133,14 @@ body{margin:0;background:var(--paper);color:var(--ink);
     <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">FreeCAD</span><span class="kw">STEP</span><span class="kw">STL</span><span class="kw">Inline Mesh</span><span class="kw">RK4</span><span class="kw">零件污染</span><span class="kw">底座组</span><span class="kw">身体组</span></div>
   </header>
 <div class="section-background" style="background:#f0fdf6;border-left-color:#2f6f4f;">
-  <div class="bg-title" style="color:#2f6f4f;">🏗️ 本章对应架构 L1</div>
+  <div class="bg-title" style="color:#2f6f4f;">🏗️ 本章对应架构 L1（v3.0 更新）</div>
   <div class="bg-body" style="color:#1a5c3a;">
-  本章全程在<b> Layer 1 模型描述层</b>工作。输入：ElectronBot.step（30.5MB，24 零件）→ 按 FreeCAD 运动组合并 → 5 组 STL → inline mesh MJCF（~1.7MB 单文件）。关键技术决策：<b>按运动组而非零件分组导出</b>，底座/身体/头部/左臂/右臂各成一个 STL。
+  本章全程在<b> Layer 1 模型描述层</b>工作。输入：ElectronBot.step（30.5MB，347 零件）→ 使用 <code>cascadio</code> 自动提取所有零件 → 347 个独立 STL → 外部引用 MJCF（~103KB 单文件）。关键技术决策：<b>自动化提取所有零件</b>，使用外部 STL 引用，坐标本地化（世界坐标→父 body 相对坐标）。
   </div>
 </div>
   <div class="section-background">
   <div class="bg-title">📖 本节背景</div>
-  <div class="bg-body">本章从概要设计文档 Layer 1 出发，目标为： 1. 在 FreeCAD 中打开原始 STEP 文件并确认零件分组 2. 按运动组合并导出 5 组 STL 3. 编写脚本生成 inline mesh 格式的 MJCF 文件</div>
+  <div class="bg-body">本章从概要设计文档 Layer 1 出发，目标为： 1. 使用 <code>cascadio</code> + <code>trimesh</code> 自动从 STEP 文件提取 347 个零件 2. 自动分类到 body/head/neck/shoulder/left_arm/right_arm 6 个分组 3. 坐标本地化（世界坐标→父 body 相对坐标） 4. 编写脚本生成外部 STL 引用格式的 MJCF 文件</div>
 </div>
   
   <figure class="diagram">
@@ -176,19 +176,19 @@ body{margin:0;background:var(--paper);color:var(--ink);
 <p>本章从概要设计文档 Layer 1 出发，目标为：</p>
 <ol>
 <li>
-<p>在 FreeCAD 中打开原始 STEP 文件并确认零件分组</p>
+<p>使用 <code>cascadio</code> + <code>trimesh</code> 自动从 STEP 文件提取 347 个零件</p>
 </li>
 <li>
-<p>按运动组合并导出 5 组 STL</p>
+<p>自动分类到 body/head/neck/shoulder/left_arm/right_arm 6 个分组</p>
 </li>
 <li>
-<p>编写脚本生成 inline mesh 格式的 MJCF 文件</p>
+<p>坐标本地化（世界坐标→父 body 相对坐标）</p>
+</li>
+<li>
+<p>编写脚本生成外部 STL 引用格式的 MJCF 文件</p>
 </li>
 <li>
 <p>调参确保仿真稳定</p>
-</li>
-<li>
-<p>将模型与场景文件拆分</p>
 </li>
 </ol>
 <h2>3.2 三类文件的定位</h2>
@@ -204,122 +204,174 @@ body{margin:0;background:var(--paper);color:var(--ink);
 </thead>
 <tbody>
 <tr>
-<td>CAD (.step / .FCStd)</td>
+<td>CAD (.step)</td>
 <td>原始设计图纸</td>
-<td>24 个零件的精确几何与装配关系</td>
+<td>347 个零件的精确几何与装配关系（30.5MB）</td>
 <td>FreeCAD / SolidWorks</td>
 </tr>
 <tr>
 <td>STL (.stl)</td>
 <td>3D 表面网格</td>
-<td>三角形顶点坐标，仅描述外形</td>
-<td>从 CAD 导出</td>
+<td>347 个独立零件的三角形顶点坐标，外部引用</td>
+<td>cascadio + trimesh 自动提取</td>
 </tr>
 <tr>
 <td>MJCF (.xml)</td>
 <td>仿真描述文件</td>
-<td>刚体层次、关节定义、执行器参数</td>
-<td>脚本生成</td>
+<td>刚体层次、关节定义、执行器参数、外部 STL 引用</td>
+<td>step_to_mjcf.py 脚本生成</td>
 </tr>
 </tbody>
 </table>
 <p>三段转换关系：</p>
 <pre><code>CAD（设计意图）→ STL（外形）→ MJCF（运动描述）
 </code></pre>
-<h2>3.3 零件分组与运动组确认</h2>
-<h3>3.3.1 FreeCAD 中打开 STEP</h3>
-<pre><code class="language-bash">/path/to/FreeCAD.AppImage assets/cad/ElectronBot.step
+<h2>3.3 零件分组与运动组确认（v3.0 自动化方案）</h2>
+<h3>3.3.1 自动提取 347 个零件</h3>
+<p>v3.0 方案使用 <code>scripts/step_to_mjcf.py</code> 自动从 STEP 文件提取所有零件：</p>
+<pre><code class="language-bash">python scripts/step_to_mjcf.py
 </code></pre>
-<p>打开后可观察到 24 个零件，命名格式为 <code>Part__Feature</code> 后接序号，从名称难以判断物理归属。须通过专用宏文件确认分组。</p>
-<h3>3.3.2 运行宏确认分组</h3>
-<p>宏文件位于 <code>assets/cad/electronbot_joints.FCMacro</code>，在 FreeCAD 中运行后输出以下分组信息：</p>
-<p><strong>底座组</strong>（固定，不参与运动）：</p>
-<pre><code class="language-python">BASE_PARTS = [
-    &quot;Part__Feature043&quot;,  # 底座主体
-    &quot;Part__Feature044&quot;,  # 底座底板
-]
-</code></pre>
-<p><strong>身体组</strong>（绕 Z 轴旋转）：</p>
-<pre><code class="language-python">BODY_PARTS = [
-    &quot;Part__Feature034&quot;,  # 身体中心
-    &quot;Part__Feature035&quot;,  # 身体右侧外壳
-    &quot;Part__Feature036&quot;,  # 身体左侧外壳
-]
-</code></pre>
-<p><strong>特别注意</strong>：零件 <code>Part__Feature035</code> 和 <code>Part__Feature036</code> 属于身体组，<strong>不属于</strong>手臂。原始导出因未使用宏确认分组，曾导致这两个零件被错误地合并到手臂 STL 中。</p>
-<p><strong>左臂组</strong>（绕 Y 轴 Pitch、绕 X 轴 Roll，6 个零件）：</p>
-<pre><code class="language-python">LEFT_ARM_PARTS = [
-    &quot;Part__Feature042&quot;,  # 左手
-    &quot;Part__Feature045&quot;,  # 左手镜
-    &quot;Part__Feature046&quot;, &quot;Part__Feature047&quot;,
-    &quot;Part__Feature048&quot;, &quot;Part__Feature049&quot;,
-]
-</code></pre>
-<p><strong>右臂组</strong>（7 个零件）：</p>
-<pre><code class="language-python">RIGHT_ARM_PARTS = [
-    &quot;Part__Feature027&quot;,  # 齿轮
-    &quot;Part__Feature028&quot;,  # 小齿轮
-    &quot;Part__Feature029&quot;,  # 右手
-    &quot;Part__Feature030&quot;, &quot;Part__Feature031&quot;,
-    &quot;Part__Feature032&quot;, &quot;Part__Feature033&quot;,
-]
-</code></pre>
-<p><strong>头部组</strong>（5 个零件）：</p>
-<pre><code class="language-python">HEAD_PARTS = [
-    &quot;Part__Feature037&quot;, &quot;Part__Feature038&quot;, &quot;Part__Feature039&quot;,
-    &quot;Part__Feature040&quot;, &quot;Part__Feature041&quot;,
-]
-</code></pre>
-<h3>3.3.3 我的分组实现过程</h3>
-<p>实际进行分组时，我按以下步骤操作：</p>
+<p>脚本核心逻辑：</p>
 <ol>
 <li>
-<p><strong>打开 FreeCAD 加载 STEP</strong>：执行 <code>/path/to/FreeCAD.AppImage assets/cad/ElectronBot.step</code>。等待约 10 秒，FreeCAD 界面显示 24 个零件的装配树。</p>
+<p>使用 <code>cascadio</code> 将 STEP 转换为 GLB 格式（保留零件边界和色彩）</p>
 </li>
 <li>
-<p><strong>寻找宏文件位置</strong>：切换到 <code>assets/cad/</code> 目录，发现除了 STEP 文件外还有 <code>electronbot_joints.FCMacro</code>。这个宏是上次配合测试时留下的，我直接拿来用。</p>
+<p>使用 <code>trimesh</code> 读取 GLB 场景图，遍历 scene graph</p>
 </li>
 <li>
-<p><strong>在 FreeCAD 中运行宏</strong>：菜单 Tools → Run Macro → 选择 <code>electronbot_joints.FCMacro</code>。宏运行后弹出分组信息，逐条复制到笔记中。</p>
+<p>自动提取 347 个独立零件的 mesh 和 transform</p>
 </li>
 <li>
-<p><strong>逐个零件验证</strong>：为了确认宏的分组正确，我逐组在 FreeCAD 中手动隐藏零件来观察：</p>
+<p>按名称自动分类到 body/head/neck/shoulder/left_arm/right_arm</p>
+</li>
+<li>
+<p>导出每个零件的 STL 到 <code>assets/meshes/step_parts/</code></p>
 </li>
 </ol>
+<h3>3.3.2 自动分类规则</h3>
+<p>脚本根据零件名称中的关键词自动分类：</p>
+<table>
+<thead>
+<tr>
+<th>分组</th>
+<th>关键词匹配</th>
+<th>零件数量</th>
+<th>运动类型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>body</td>
+<td>body, torso, chest</td>
+<td>~80</td>
+<td>绕 Z 轴旋转</td>
+</tr>
+<tr>
+<td>head</td>
+<td>head, face, eye</td>
+<td>~45</td>
+<td>绕 Y 轴俯仰</td>
+</tr>
+<tr>
+<td>neck</td>
+<td>neck</td>
+<td>~15</td>
+<td>连接头部与身体</td>
+</tr>
+<tr>
+<td>shoulder</td>
+<td>shoulder</td>
+<td>~20</td>
+<td>肩膀连接件</td>
+</tr>
+<tr>
+<td>left_arm</td>
+<td>left, arm_l</td>
+<td>~90</td>
+<td>pitch + roll 双关节</td>
+</tr>
+<tr>
+<td>right_arm</td>
+<td>right, arm_r</td>
+<td>~97</td>
+<td>pitch + roll 双关节</td>
+</tr>
+</tbody>
+</table>
+<h3>3.3.3 坐标本地化</h3>
+<p>脚本自动完成坐标转换，使每个零件相对于其父 body 定位：</p>
+<pre><code class="language-python"># 1. 计算所有零件的最低 z 坐标（用于让模型坐地）
+min_z = min([p[&quot;min_z&quot;] for p in all_parts])
+z_shift = -min_z
+
+# 2. 计算每个零件相对于父 body 的偏移
+def _localize_parts(parts, parent_world_pos):
+    for p in parts:
+        stl_path = stl_base / p[&quot;stl&quot;]
+        mesh = trimesh.load(stl_path)
+        # 顶点加 z_shift（让模型坐地）
+        mesh.vertices[:, 2] += z_shift
+        # 转换为 local 坐标（减去父 body 世界位置）
+        mesh.vertices -= parent_world_pos
+        local_path = stl_path.with_name(stl_path.stem + &quot;_local.stl&quot;)
+        mesh.export(local_path)
+        p[&quot;local_stl&quot;] = local_path.name
+</code></pre>
+<p>关键点：</p>
 <ul>
 <li>
-<p>先隐藏 BODY_PARTS 中的 035 和 036，发现机器人的身体两侧外壳消失了，确认它们确实是身体的一部分。</p>
+<p><code>geom.pos = 0</code>：几何体无额外偏移</p>
 </li>
 <li>
-<p>再隐藏 LEFT_ARM_PARTS 的 042~049，左臂全部消失，身体完好。</p>
+<p>最终显示位置 = <code>body.pos + geom.pos + localVertex</code> = <code>parent_world_pos + 0 + (worldVertex + z_shift - parent_world_pos)</code> = <code>worldVertex + z_shift</code></p>
+</li>
+<li>
+<p>这样确保零件显示在正确位置，且模型最低点接触地面</p>
 </li>
 </ul>
-<ol start="5">
-<li><strong>记录分组</strong>：将分组信息整理成 Python 列表，为后续导出脚本做准备。</li>
-</ol>
-<h3>3.3.4 零件污染问题</h3>
-<p>原始导出中的错误：身体侧外壳（<code>Part__Feature035</code> / <code>036</code>）被错误合并到手臂 STL。后果为 MuJoCo 中控制手臂时，身体外壳跟着手臂一起运动。排查此问题耗时较长，因为零件编号不包含结构信息，只能逐个隐藏定位。</p>
-<p><strong>教训</strong>：从 CAD 导出 STL 前，必须运行宏确认零件分组，不能凭名称或位置猜测。</p>
-<h4>我的排查过程</h4>
-<p>发现这个问题是在初次加载生成的 XML 时。在 Viewer 中拖动 <code>act_left_pitch</code>，左臂抬起，但身体左侧外壳也跟着抬起来了。我最初以为是关节定义错误，排查了一上午。</p>
-<p>排查步骤：</p>
-<ol>
-<li>
-<p><strong>检查关节轴方向</strong>：怀疑 joint axis 设错了，左右臂轴反了——结果 XML 中 axis 定义正确。</p>
-</li>
-<li>
-<p><strong>检查 body 父子关系</strong>：怀疑 left_arm 挂在了错误的位置——结果父子关系正确。</p>
-</li>
-<li>
-<p><strong>检查 STL 文件</strong>：打开 <code>left_arm_fc.stl</code> 查看，发现它包含了身体外壳零件 <code>Part__Feature035</code>。</p>
-</li>
-<li>
-<p><strong>回到 FreeCAD 验证</strong>：逐个隐藏零件，观察哪个"不应该动"。最终确认 035 和 036 属于身体。</p>
-</li>
-<li>
-<p><strong>重新导出</strong>：按正确的分组重新运行导出脚本。</p>
-</li>
-</ol>
+<h3>3.3.4 v2.0 vs v3.0 方案对比</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>v2.0（手动分组）</th>
+<th>v3.0（自动提取）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>零件数量</td>
+<td>24 个（按运动组合并）</td>
+<td>347 个（独立零件）</td>
+</tr>
+<tr>
+<td>分组方式</td>
+<td>FreeCAD 宏手动确认</td>
+<td>脚本自动按名称分类</td>
+</tr>
+<tr>
+<td>STL 导出</td>
+<td>5 组合并 STL</td>
+<td>347 个独立 STL</td>
+</tr>
+<tr>
+<td>MJCF 格式</td>
+<td>inline mesh（~1.7MB）</td>
+<td>外部 STL 引用（~103KB）</td>
+</tr>
+<tr>
+<td>坐标处理</td>
+<td>手动计算偏移</td>
+<td>自动本地化</td>
+</tr>
+<tr>
+<td>可维护性</td>
+<td>低（需手动更新）</td>
+<td>高（重新运行脚本即可）</td>
+</tr>
+</tbody>
+</table>
   </main>
   <div class="glossary-section">
   <div class="gs-title">🔑 关键词释义</div>
@@ -333,12 +385,12 @@ body{margin:0;background:var(--paper);color:var(--ink);
 </div>
   
   <div class="code-index">
-  <div class="ci-title">📂 建模阶段关键脚本</div>
-  <div class="ci-item"><span class="ci-file">assets/cad/ElectronBot.step</span><span class="ci-desc">— 原始 CAD 模型（30.5MB，24 零件）</span></div>
-  <div class="ci-item"><span class="ci-file">scripts/export_cad_meshes.py</span> · <span class="ci-func">FreeCAD 批量 STL 导出</span></div>
-  <div class="ci-item"><span class="ci-file">scripts/generate_inline_mesh.py</span> · <span class="ci-func">STL → inline mesh XML 生成器</span></div>
+  <div class="ci-title">📂 建模阶段关键脚本（v3.0）</div>
+  <div class="ci-item"><span class="ci-file">assets/cad/ElectronBot.step</span><span class="ci-desc">— 原始 CAD 模型（30.5MB，347 零件）</span></div>
+  <div class="ci-item"><span class="ci-file">scripts/step_to_mjcf.py</span> · <span class="ci-func">STEP → MJCF 自动转换（cascadio + trimesh）</span></div>
+  <div class="ci-item"><span class="ci-file">scripts/generate_inline_mesh.py</span> · <span class="ci-func">旧版 STL → inline mesh XML 生成器（v2.0）</span></div>
   <div class="ci-item"><span class="ci-file">scripts/validate_model.py</span> · <span class="ci-func">模型结构验证</span></div>
-  <div class="ci-item"><span class="ci-file">assets/meshes/</span><span class="ci-desc">— 5 个 STL 文件（base_link/body/head/left_arm/right_arm）</span></div>
+  <div class="ci-item"><span class="ci-file">assets/meshes/step_parts/</span><span class="ci-desc">— 347 个独立零件 STL（v3.0）</span></div>
 </div>
 <div class="logic-summary">
   <div class="ls-title">⚙️ 实现逻辑</div>

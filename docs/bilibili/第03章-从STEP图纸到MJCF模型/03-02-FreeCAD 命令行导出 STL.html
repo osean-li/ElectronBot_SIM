@@ -125,7 +125,7 @@ body{margin:0;background:var(--paper);color:var(--ink);
 <article class="book-page">
   <header class="chap-header">
     <div class="chap-kicker">第 03 章 · L1 模型描述层  —  子章节 7/21</div>
-    <h1>3.4 FreeCAD 命令行导出 STL</h1>
+    <h1>3.4 自动化提取 STL（v3.0 更新）</h1>
     <div class="chap-meta">
       <span>阅读约 10 分钟</span>
       <span>2,389 字</span>
@@ -133,8 +133,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
     <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">FreeCAD</span><span class="kw">STEP</span><span class="kw">STL</span><span class="kw">Inline Mesh</span><span class="kw">RK4</span><span class="kw">零件污染</span><span class="kw">创建脚本文件</span><span class="kw">逐组编写导出代码</span></div>
   </header>
   <div class="section-background">
-  <div class="bg-title">📖 本节背景</div>
-  <div class="bg-body">确认分组后，编写导出脚本 `export_groups.sh`。该脚本通过 FreeCAD 的命令行模式运行，使用 `QT_QPA_PLATFORM=offscreen` 在无显示器环境中执行： QT_QPA_PLATFORM=offscreen DISPLAY= \</div>
+  <div class="bg-title">📖 本节背景（v3.0 更新）</div>
+  <div class="bg-body">v3.0 方案使用 <code>scripts/step_to_mjcf.py</code> 自动从 STEP 文件提取所有零件：<br/>1. 使用 <code>cascadio</code> 将 STEP 转换为 GLB 格式（保留零件边界和色彩）<br/>2. 使用 <code>trimesh</code> 读取 GLB 场景图，遍历 scene graph<br/>3. 自动提取 347 个独立零件的 mesh 和 transform<br/>4. 导出每个零件的 STL 到 <code>assets/meshes/step_parts/</code><br/><br/>v2.0 方案使用 FreeCAD 命令行手动导出 5 组合并 STL，需要预先确认零件分组。</div>
 </div>
   
   
@@ -145,111 +145,59 @@ body{margin:0;background:var(--paper);color:var(--ink);
 </div>
   
   <main class="content">
-<h2>3.4 FreeCAD 命令行导出 STL</h2>
-<h3>3.4.1 导出脚本</h3>
-<p>确认分组后，编写导出脚本 <code>export_groups.sh</code>。该脚本通过 FreeCAD 的命令行模式运行，使用 <code>QT_QPA_PLATFORM=offscreen</code> 在无显示器环境中执行：</p>
-<pre><code class="language-bash">QT_QPA_PLATFORM=offscreen DISPLAY= \
-  /path/to/FreeCAD_1.1.1-Linux-x86_64-py311.AppImage \
-  --appimage-extract-and-run -c &quot;
-import FreeCAD, Part, Mesh, MeshPart, os
-
-doc = FreeCAD.open('assets/cad/cadelectron.FCStd')
-OUT = 'assets/meshes'
-
-BODY = ['Part__Feature034','Part__Feature035','Part__Feature036']
-shapes = [doc.getObject(p).Shape for p in BODY if doc.getObject(p)]
-compound = Part.Compound(shapes)
-mesh = doc.addObject('Mesh::Feature', 'tmp')
-mesh.Mesh = MeshPart.meshFromShape(
-    Shape=compound, LinearDeflection=0.5,
-    AngularDeflection=0.5, Relative=False)
-mesh.Mesh.write(os.path.join(OUT, 'body_fc.stl'))
-doc.removeObject(mesh.Name)
-
-# 左臂组（6 个零件合并）
-LEFT = ['Part__Feature042','Part__Feature045',
-        'Part__Feature046','Part__Feature047',
-        'Part__Feature048','Part__Feature049']
-shapes = [doc.getObject(p).Shape for p in LEFT if doc.getObject(p)]
-compound = Part.Compound(shapes)
-mesh = doc.addObject('Mesh::Feature', 'tmp')
-mesh.Mesh = MeshPart.meshFromShape(
-    Shape=compound, LinearDeflection=0.5,
-    AngularDeflection=0.5, Relative=False)
-mesh.Mesh.write(os.path.join(OUT, 'left_arm_fc.stl'))
-doc.removeObject(mesh.Name)
-
-# 右臂、底座、头部组同理（代码略）
-FreeCAD.closeDocument(doc.Name)
-&quot;
+<h2>3.4 自动化提取 STL（v3.0）</h2>
+<h3>3.4.1 v3.0 自动提取方案</h3>
+<p>v3.0 使用 <code>scripts/step_to_mjcf.py</code> 自动从 STEP 文件提取所有零件，无需 FreeCAD 手动操作：</p>
+<pre><code class="language-bash">python scripts/step_to_mjcf.py
 </code></pre>
-<h3>3.4.2 脚本参数说明</h3>
-<ul>
-<li>
-<p><code>LinearDeflection=0.5</code>：控制 STL 三角形边长不超过 0.5mm，保证网格精度</p>
-</li>
-<li>
-<p><code>QT_QPA_PLATFORM=offscreen</code>：关闭 Qt 图形界面，允许在无显示器的环境中运行</p>
-</li>
-<li>
-<p><code>Part.Compound(shapes)</code>：将同组的多个零件合并为一个复合体，再导出为单个 STL</p>
-</li>
-</ul>
-<h3>3.4.3 我的导出实现过程</h3>
-<p>编写和执行导出脚本的过程如下：</p>
+<p>脚本核心流程：</p>
 <ol>
 <li>
-<p><strong>创建脚本文件</strong>：新建 <code>export_groups.sh</code>，将宏输出的分组信息写入脚本。</p>
+<p>使用 <code>cascadio</code> 将 STEP 转换为 GLB 格式（保留零件边界和色彩）</p>
 </li>
 <li>
-<p><strong>逐组编写导出代码</strong>：先写身体组导出作为模板，测试通过后再复制为左臂、右臂、底座、头部。</p>
+<p>使用 <code>trimesh</code> 读取 GLB 场景图，遍历 scene graph</p>
 </li>
 <li>
-<p><strong>第一次运行报错</strong>：
-   <code>bash
-   QStandardPaths: wrong permissions on runtime directory</code>
-   原因是 FreeCAD 的 Qt 界面需要运行时目录权限。在命令前加上 <code>QT_QPA_PLATFORM=offscreen DISPLAY=</code> 解决。</p>
+<p>自动提取 347 个独立零件的 mesh 和 transform</p>
 </li>
 <li>
-<p><strong>验证输出</strong>：导出完成后执行 <code>ls -la assets/meshes/*.stl</code> 确认 5 个文件都在。用 <code>trimesh</code> 快速检查每个文件是否可加载：
-   <code>bash
-   python3 -c "import trimesh; m=trimesh.load('assets/meshes/body_fc.stl'); print(m.bounds)"</code></p>
-</li>
-<li>
-<p><strong>确认包围盒数据</strong>：记录每个文件的包围盒范围，为后续偏移计算准备数据。</p>
+<p>导出每个零件的 STL 到 <code>assets/meshes/step_parts/</code></p>
 </li>
 </ol>
-<h3>3.4.4 导出结果</h3>
+<h3>3.4.2 关键依赖</h3>
+<ul>
+<li>
+<p><code>cascadio</code>：将 STEP 文件转换为 GLB 格式，保留零件边界信息</p>
+</li>
+<li>
+<p><code>trimesh</code>：读取 GLB 场景图，遍历 scene graph 提取每个零件</p>
+</li>
+</ul>
+<h3>3.4.3 输出结果</h3>
 <table>
 <thead>
 <tr>
-<th>STL 文件</th>
-<th>包含零件</th>
-<th style="text-align: center;">件数</th>
-<th style="text-align: center;">包围盒 X 范围 (mm)</th>
+<th>输出目录</th>
+<th>文件数量</th>
+<th style="text-align: center;">说明</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>body_fc.stl</code></td>
-<td>身体中心 + 两侧外壳</td>
-<td style="text-align: center;">3</td>
-<td style="text-align: center;">[-27.9, 27.9]</td>
+<td><code>assets/meshes/step_parts/*.stl</code></td>
+<td>347</td>
+<td style="text-align: center;">每个零件的原始 STL（世界坐标）</td>
 </tr>
 <tr>
-<td><code>left_arm_fc.stl</code></td>
-<td>左手 + 5 臂件</td>
-<td style="text-align: center;">6</td>
-<td style="text-align: center;">[-34.9, -1.5]</td>
-</tr>
-<tr>
-<td><code>right_arm_fc.stl</code></td>
-<td>右手 + 齿轮 + 5 臂件</td>
-<td style="text-align: center;">7</td>
-<td style="text-align: center;">[1.5, 34.9]</td>
+<td><code>assets/meshes/step_parts/*_local.stl</code></td>
+<td>347</td>
+<td style="text-align: center;">本地化后的 STL（父 body 相对坐标）</td>
 </tr>
 </tbody>
 </table>
+<h3>3.4.4 v2.0 手动方案（历史参考）</h3>
+<p>v2.0 使用 FreeCAD 命令行手动导出 5 组合并 STL。该方案需要预先确认零件分组，且存在零件污染风险（如身体外壳被错误合并到手臂）。v3.0 自动化方案已完全取代此方案。</p>
   </main>
   <div class="glossary-section">
   <div class="gs-title">🔑 关键词释义</div>

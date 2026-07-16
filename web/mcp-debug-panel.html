@@ -125,22 +125,40 @@
    TOOL DEFINITIONS
    ============================================================ */
 const TOOLS = [
-  { section: '🎬 预设动作', count:6, tools: [
-    { name:'self.electron.hand_action', label:'🖐 举手', tag:'real', json:{action:1,hand:3,steps:2,speed:800} },
-    { name:'self.electron.hand_action', label:'🖐 放手', tag:'real', json:{action:2,hand:3,steps:2,speed:800} },
-    { name:'self.electron.hand_action', label:'👋 挥手', tag:'real', json:{action:3,hand:3,steps:2,speed:600} },
-    { name:'self.electron.hand_action', label:'👏 拍打', tag:'real', json:{action:4,hand:3,steps:2,speed:600} },
-    { name:'self.electron.hand_action', label:'👈 左手举手', tag:'real', json:{action:1,hand:1,steps:2,speed:800} },
-    { name:'self.electron.hand_action', label:'👉 右手举手', tag:'real', json:{action:1,hand:2,steps:2,speed:800} },
+  { section: '🖐️ 手部动作', count:10, tools: [
+    { name:'self.electron.hand_action', label:'🙌 举起双手', tag:'real', json:{action:5,hand:3,steps:1,speed:800} },
+    { name:'self.electron.hand_action', label:'👋 挥挥手', tag:'real', json:{action:6,hand:3,steps:1,speed:600} },
+    { name:'self.electron.hand_action', label:'👏 拍拍手', tag:'real', json:{action:7,hand:3,steps:1,speed:600} },
+    { name:'self.electron.hand_action', label:'💪 放下手臂', tag:'real', json:{action:8,hand:3,steps:1,speed:800} },
+    { name:'self.electron.hand_action', label:'🖐 举手 (单手)', tag:'real', json:{action:1,hand:3,steps:1,speed:800} },
+    { name:'self.electron.hand_action', label:'🖐 放手', tag:'real', json:{action:2,hand:3,steps:1,speed:800} },
+    { name:'self.electron.hand_action', label:'👋 挥手', tag:'real', json:{action:3,hand:3,steps:1,speed:600} },
+    { name:'self.electron.hand_action', label:'👏 拍打', tag:'real', json:{action:4,hand:3,steps:1,speed:600} },
+    { name:'self.electron.hand_action', label:'👈 左手举手', tag:'real', json:{action:1,hand:1,steps:1,speed:800} },
+    { name:'self.electron.hand_action', label:'👉 右手举手', tag:'real', json:{action:1,hand:2,steps:1,speed:800} },
   ]},
-  { section: '🧍 身体/头部', count:7, tools: [
-    { name:'self.electron.body_turn', label:'⬅️ 左转 45°', tag:'real', json:{direction:1,angle:45,speed:1000} },
-    { name:'self.electron.body_turn', label:'➡️ 右转 45°', tag:'real', json:{direction:2,angle:45,speed:1000} },
+  { section: '🧍 身体动作', count:6, tools: [
+    { name:'self.electron.body_turn', label:'⬅️ 向左转 30°', tag:'real', json:{direction:1,angle:30,speed:1000} },
+    { name:'self.electron.body_turn', label:'⬅️ 向左转 45°', tag:'real', json:{direction:1,angle:45,speed:1000} },
+    { name:'self.electron.body_turn', label:'➡️ 向右转 30°', tag:'real', json:{direction:2,angle:30,speed:1000} },
+    { name:'self.electron.body_turn', label:'➡️ 向右转 45°', tag:'real', json:{direction:2,angle:45,speed:1000} },
+    { name:'self.electron.body_turn', label:'🔄 转个身', tag:'real', json:{direction:2,angle:90,speed:1500} },
     { name:'self.electron.body_turn', label:'🔙 回正', tag:'real', json:{direction:3} },
-    { name:'self.electron.head_move', label:'🔝 抬头', tag:'real', json:{action:1,angle:10,speed:300} },
-    { name:'self.electron.head_move', label:'🔽 低头', tag:'real', json:{action:2,angle:10,speed:300} },
-    { name:'self.electron.head_move', label:'🙂 点头', tag:'real', json:{action:3,angle:8,speed:400} },
-    { name:'self.electron.head_move', label:'🔙 回中', tag:'real', json:{action:4} },
+  ]},
+  { section: '🗣️ 头部动作', count:8, tools: [
+    { name:'self.electron.head_move', label:'🔝 抬头看看', tag:'real', json:{action:1,angle:15,speed:300} },
+    { name:'self.electron.head_move', label:'🔽 低头思考', tag:'real', json:{action:2,angle:15,speed:300} },
+    { name:'self.electron.head_move', label:'🙂 点点头', tag:'real', json:{action:3,angle:10,speed:400,steps:1} },
+    { name:'self.electron.head_move', label:'🙂 连续点头', tag:'real', json:{action:5,angle:10,speed:400,steps:3} },
+    { name:'self.electron.head_move', label:'🔙 头部回正', tag:'real', json:{action:4} },
+    { name:'self.electron.head_move', label:'🔝 抬头 (小幅度)', tag:'real', json:{action:1,angle:5,speed:300} },
+    { name:'self.electron.head_move', label:'🔽 低头 (小幅度)', tag:'real', json:{action:2,angle:5,speed:300} },
+    { name:'self.electron.head_move', label:'🙂 点头 (小幅度)', tag:'real', json:{action:3,angle:5,speed:400} },
+  ]},
+  { section: '🎭 组合动作', count:3, tools: [
+    { name:'self.electron.combo_action', label:'👋 挥手告别', tag:'real', json:{combo:1,speed:800} },
+    { name:'self.electron.combo_action', label:'✅ 表示同意', tag:'real', json:{combo:2,speed:800} },
+    { name:'self.electron.combo_action', label:'👀 环顾四周', tag:'real', json:{combo:3,speed:1000} },
   ]},
   { section: '⚙️ 舵机控制 @sim_only', count:6, tools: [
     { name:'self.electron.servo_move', label:'RP(rp)→90°', tag:'sim', json:{servo_type:'rp',position:90,speed:1000} },

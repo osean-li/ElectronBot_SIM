@@ -202,14 +202,18 @@ def extract_mesh_nodes(
 
         mesh_copy.export(stl_path)
 
-        # 使用 mesh 质心作为位置 (因为 scene graph transform 是单位矩阵)
+        # 使用变换后 mesh 的质心作为零件世界位置（用于后续坐标本地化）
         mesh_centroid = mesh_copy.centroid.tolist()
+        
+        # 计算 mesh 顶点的最低 z 坐标（用于后续让模型坐地）
+        min_vertex_z = float(mesh_copy.vertices[:, 2].min())
 
         nodes.append({
             "name": safe_name,
             "stl": stl_path.name,
             "category": category,
             "world_pos": mesh_centroid,  # 使用 mesh 质心
+            "min_z": min_vertex_z,  # mesh 顶点的最低 z 坐标
             "world_matrix": world_matrix,
             "mesh": mesh_copy,
         })
@@ -294,11 +298,11 @@ def group_nodes_by_category(nodes: List[dict]) -> Dict[str, List[dict]]:
     return groups
 
 
-def _convert_stl_to_local(stl_path: Path, body_center: np.ndarray) -> Path:
-    """将 STL 从世界坐标转换为本地坐标（减去 body 中心），返回本地 STL 路径."""
+def _convert_stl_to_local(stl_path: Path, offset: np.ndarray) -> Path:
+    """将 STL 从世界坐标转换为本地坐标（减去 offset），返回本地 STL 路径."""
     import trimesh
     mesh = trimesh.load(stl_path)
-    mesh.vertices -= body_center
+    mesh.vertices -= offset
     local_path = stl_path.with_name(stl_path.stem + "_local.stl")
     mesh.export(local_path)
     return local_path
@@ -311,28 +315,19 @@ def generate_mjcf(
 ) -> None:
     """生成 MJCF XML (6-DOF).
 
-    关键：STL 顶点是世界坐标（米），需要先转换为各 body 的本地坐标。
+    关键修正：
+    - 使用 body 组中心作为 body 的世界位置
+    - 其他零件组用各自中心做本地化
+    - 每个零件的 geom.pos 设为其世界位置相对于 body 中心的偏移
     """
     import trimesh
 
     stl_base = Path(stl_dir)
 
-    # 计算 body center (所有零件位置的中心)
-    all_positions = []
-    for cat, parts in groups.items():
-        for p in parts:
-            all_positions.append(p["world_pos"])
-    if all_positions:
-        body_center = np.mean(all_positions, axis=0)
-    else:
-        body_center = np.array([0, 0, 0])
-
-    logger.info("  body center = (%.4f, %.4f, %.4f)", *body_center)
-
-    # 找到所有零件的最低 z 坐标
-    all_z = [p["world_pos"][2] for parts in groups.values() for p in parts]
-    min_z = min(all_z) if all_z else 0
-    logger.info("  最低 z = %.4f", min_z)
+    # 找到所有零件顶点的最低 z 坐标（用于让模型坐地）
+    all_min_z = [p["min_z"] for parts in groups.values() for p in parts if "min_z" in p]
+    min_z = min(all_min_z) if all_min_z else 0
+    logger.info("  最低顶点 z = %.4f", min_z)
 
     # 世界原点 → 最低点偏移 (让机器人坐在地上)
     z_shift = -min_z
@@ -348,7 +343,7 @@ def generate_mjcf(
     base_parts = groups.get("base", [])
     unknown_parts = groups.get("unknown", [])
 
-    # 计算各 body 的世界坐标中心（用于 STL 本地化）
+    # 计算各 body 的世界坐标中心
     def _group_center(parts):
         if not parts:
             return np.array([0, 0, 0])
@@ -360,26 +355,61 @@ def generate_mjcf(
     right_arm_world_raw = _group_center(right_arm_parts)
     base_world_raw = _group_center(base_parts)
 
-    # 将 STL 顶点转换为本地坐标（相对于各自 body 中心）
-    def _localize_parts(parts, center):
-        for p in parts:
-            stl_path = stl_base / p["stl"]
-            local_path = _convert_stl_to_local(stl_path, center)
-            p["local_stl"] = local_path.name
-        return parts
-
-    _localize_parts(body_parts, body_world_raw)
-    _localize_parts(head_parts, head_world_raw)
-    _localize_parts(neck_parts, _group_center(neck_parts) if neck_parts else body_world_raw)
-    _localize_parts(shoulder_parts, _group_center(shoulder_parts) if shoulder_parts else body_world_raw)
-    _localize_parts(left_arm_parts, left_arm_world_raw)
-    _localize_parts(right_arm_parts, right_arm_world_raw)
-    _localize_parts(base_parts, base_world_raw)
-    _localize_parts(unknown_parts, body_world_raw)  # unknown 归到 body
-
     # body 的世界位置（加 z_shift 让机器人坐地）
     body_world = body_world_raw.copy()
     body_world[2] += z_shift
+
+    # 计算各子 body 的世界位置（加 z_shift）
+    neck_world_raw = _group_center(neck_parts) if neck_parts else body_world_raw
+    neck_world = neck_world_raw.copy()
+    neck_world[2] += z_shift
+
+    head_world = head_world_raw.copy()
+    head_world[2] += z_shift
+
+    shoulder_world_raw = _group_center(shoulder_parts) if shoulder_parts else body_world_raw
+    shoulder_world = shoulder_world_raw.copy()
+    shoulder_world[2] += z_shift
+
+    left_arm_world = left_arm_world_raw.copy()
+    left_arm_world[2] += z_shift
+
+    right_arm_world = right_arm_world_raw.copy()
+    right_arm_world[2] += z_shift
+
+    base_world = base_world_raw.copy()
+    base_world[2] += z_shift
+
+    # 关键修正：STL 顶点转换为 local 坐标（减去父 body 世界位置）
+    # geom.pos = 0，最终位置 = body.pos + 0 + localVertex = worldVertex + z_shift
+    def _localize_parts(parts, parent_world_pos):
+        """将 STL 顶点从世界坐标转换为相对于父 body 的 local 坐标
+        注意：parent_world_pos 已经包含 z_shift，所以 local 坐标 = worldVertex - parent_world_pos
+        最终显示位置 = body.pos + localVertex = parent_world_pos + (worldVertex - parent_world_pos) = worldVertex
+        但 worldVertex 需要加 z_shift 才能坐地，所以 local 坐标 = (worldVertex + z_shift) - parent_world_pos
+        """
+        for p in parts:
+            stl_path = stl_base / p["stl"]
+            # 读取 STL，将顶点加 z_shift，再减去 parent_world_pos
+            import trimesh
+            mesh = trimesh.load(stl_path)
+            # 顶点加 z_shift（让模型坐地）
+            mesh.vertices[:, 2] += z_shift
+            # 转换为 local 坐标（减去父 body 世界位置）
+            mesh.vertices -= parent_world_pos
+            local_path = stl_path.with_name(stl_path.stem + "_local.stl")
+            mesh.export(local_path)
+            p["local_stl"] = local_path.name
+        return parts
+
+    _localize_parts(body_parts, body_world)
+    _localize_parts(unknown_parts, body_world)
+    _localize_parts(neck_parts, neck_world)
+    _localize_parts(head_parts, head_world)
+    _localize_parts(shoulder_parts, shoulder_world)
+    _localize_parts(left_arm_parts, left_arm_world)
+    _localize_parts(right_arm_parts, right_arm_world)
+    _localize_parts(base_parts, base_world)
 
     # 开始构建 XML
     xml_lines = [
@@ -387,6 +417,15 @@ def generate_mjcf(
         '<mujoco model="ElectronBot_step">',
         "",
         f'  <compiler meshdir="{stl_base.absolute()}" />',
+        "",
+        "  <option timestep=\"0.002\" gravity=\"0 0 -9.81\">",
+        "    <flag warmstart=\"disable\" />",
+        "  </option>",
+        "",
+        "  <default>",
+        '    <geom contype="0" conaffinity="0" condim="3" friction="0.8 0.3 0.1" density="0.1"/>',
+        "    <joint armature=\"0.001\" damping=\"0.01\" />",
+        "  </default>",
         "",
         "  <asset>",
     ]
@@ -416,12 +455,15 @@ def generate_mjcf(
         f'range="-1.5708 1.5708" limited="true" />'
     )
     # body geom: STL 已本地化，geom.pos = 0
+    # 使用更合理的质量值（0.01 kg 每零件，body 部分较多）
+    body_mass = 0.01
     for p in body_parts:
+        gp = p.get("geom_pos", np.zeros(3))
         xml_lines.append(
             f'      <geom name="geom_{p["name"]}" type="mesh" '
             f'mesh="mesh_{p["name"]}" '
-            f'pos="0 0 0" '
-            f'mass="0.001" rgba="0.5 0.5 0.6 1" />'
+            f'pos="{gp[0]:.4f} {gp[1]:.4f} {gp[2]:.4f}" '
+            f'mass="{body_mass}" rgba="0.5 0.5 0.6 1" />'
         )
 
     # neck
@@ -438,12 +480,14 @@ def generate_mjcf(
             f'        <joint name="joint_neck" type="hinge" axis="0 0 1" '
             f'range="-0.5236 0.5236" limited="true" />'
         )
+        neck_mass = 0.01
         for p in neck_parts:
+            gp = p.get("geom_pos", np.zeros(3))
             xml_lines.append(
                 f'        <geom name="geom_{p["name"]}" type="mesh" '
                 f'mesh="mesh_{p["name"]}" '
-                f'pos="0 0 0" '
-                f'mass="0.001" rgba="0.5 0.5 0.5 1" />'
+                f'pos="{gp[0]:.4f} {gp[1]:.4f} {gp[2]:.4f}" '
+                f'mass="{neck_mass}" rgba="0.5 0.5 0.5 1" />'
             )
         
         # head (作为 neck 的子 body)
@@ -459,12 +503,14 @@ def generate_mjcf(
                 f'          <joint name="joint_head" type="hinge" axis="0 1 0" '
                 f'range="-0.2618 0.2618" limited="true" />'
             )
+            head_mass = 0.02
             for p in head_parts:
+                gp = p.get("geom_pos", np.zeros(3))
                 xml_lines.append(
                     f'          <geom name="geom_{p["name"]}" type="mesh" '
                     f'mesh="mesh_{p["name"]}" '
-                    f'pos="0 0 0" '
-                    f'mass="0.001" rgba="0.3 0.6 0.8 1" />'
+                    f'pos="{gp[0]:.4f} {gp[1]:.4f} {gp[2]:.4f}" '
+                    f'mass="{head_mass}" rgba="0.3 0.6 0.8 1" />'
                 )
             xml_lines.append("        </body>")
         xml_lines.append("      </body>")
@@ -479,12 +525,14 @@ def generate_mjcf(
             f'      <body name="shoulder" '
             f'pos="{shoulder_body_pos[0]:.4f} {shoulder_body_pos[1]:.4f} {shoulder_body_pos[2]:.4f}">'
         )
+        shoulder_mass = 0.01
         for p in shoulder_parts:
+            gp = p.get("geom_pos", np.zeros(3))
             xml_lines.append(
                 f'        <geom name="geom_{p["name"]}" type="mesh" '
                 f'mesh="mesh_{p["name"]}" '
-                f'pos="0 0 0" '
-                f'mass="0.001" rgba="0.5 0.5 0.5 1" />'
+                f'pos="{gp[0]:.4f} {gp[1]:.4f} {gp[2]:.4f}" '
+                f'mass="{shoulder_mass}" rgba="0.5 0.5 0.5 1" />'
             )
         xml_lines.append("      </body>")
 
@@ -505,24 +553,28 @@ def generate_mjcf(
             f'      <body name="base" '
             f'pos="{base_body_pos[0]:.4f} {base_body_pos[1]:.4f} {base_body_pos[2]:.4f}">'
         )
+        base_mass = 0.03
         for p in base_parts:
+            gp = p.get("geom_pos", np.zeros(3))
             xml_lines.append(
                 f'        <geom name="geom_{p["name"]}" type="mesh" '
                 f'mesh="mesh_{p["name"]}" '
-                f'pos="0 0 0" '
-                f'mass="0.001" rgba="0.6 0.4 0.2 1" />'
+                f'pos="{gp[0]:.4f} {gp[1]:.4f} {gp[2]:.4f}" '
+                f'mass="{base_mass}" rgba="0.6 0.4 0.2 1" />'
             )
         xml_lines.append("      </body>")
 
     # unknown
     if unknown_parts:
         logger.info("  还有 %d 个未分类零件放在 body 下", len(unknown_parts))
+        unknown_mass = 0.01
         for p in unknown_parts:
+            gp = p.get("geom_pos", np.zeros(3))
             xml_lines.append(
                 f'      <geom name="geom_{p["name"]}" type="mesh" '
                 f'mesh="mesh_{p["name"]}" '
-                f'pos="0 0 0" '
-                f'mass="0.001" rgba="0.8 0.8 0.8 1" />'
+                f'pos="{gp[0]:.4f} {gp[1]:.4f} {gp[2]:.4f}" '
+                f'mass="{unknown_mass}" rgba="0.8 0.8 0.8 1" />'
             )
 
     xml_lines.extend([
@@ -534,21 +586,21 @@ def generate_mjcf(
         "  </worldbody>",
         "",
         "  <actuator>",
-        '    <position name="act_body" joint="body_joint" ctrlrange="-1.5708 1.5708" kp="80" kv="20"/>',
+        '    <position name="act_body" joint="body_joint" ctrlrange="-1.5708 1.5708" kp="20" kv="1"/>',
     ])
-    
+
     # 条件化添加 neck actuator
     if neck_parts:
-        xml_lines.append('    <position name="act_neck" joint="joint_neck" ctrlrange="-0.5236 0.5236" kp="40" kv="10"/>')
+        xml_lines.append('    <position name="act_neck" joint="joint_neck" ctrlrange="-0.5236 0.5236" kp="10" kv="0.5"/>')
         # head actuator 只有在 neck body 存在时才能添加（因为 head 是 neck 的子 body）
         if head_parts:
-            xml_lines.append('    <position name="act_head" joint="joint_head" ctrlrange="-0.2618 0.2618" kp="40" kv="10"/>')
-    
+            xml_lines.append('    <position name="act_head" joint="joint_head" ctrlrange="-0.2618 0.2618" kp="10" kv="0.5"/>')
+
     xml_lines.extend([
-        '    <position name="act_lp" joint="joint_lp" ctrlrange="-1.5708 1.5708" kp="60" kv="15"/>',
-        '    <position name="act_lr" joint="joint_lr" ctrlrange="-0.7854 0.7854" kp="30" kv="8"/>',
-        '    <position name="act_rp" joint="joint_rp" ctrlrange="-1.5708 1.5708" kp="60" kv="15"/>',
-        '    <position name="act_rr" joint="joint_rr" ctrlrange="-0.7854 0.7854" kp="30" kv="8"/>',
+        '    <position name="act_lp" joint="joint_lp" ctrlrange="-1.5708 1.5708" kp="20" kv="1"/>',
+        '    <position name="act_lr" joint="joint_lr" ctrlrange="-0.7854 0.7854" kp="20" kv="1"/>',
+        '    <position name="act_rp" joint="joint_rp" ctrlrange="-1.5708 1.5708" kp="20" kv="1"/>',
+        '    <position name="act_rr" joint="joint_rr" ctrlrange="-0.7854 0.7854" kp="20" kv="1"/>',
         "  </actuator>",
         "",
         "</mujoco>",
@@ -569,7 +621,10 @@ def _gen_arm_xml(
     roll_joint: str, roll_axis: str,
     z_shift: float,
 ):
-    """生成手臂 MJCF XML 块 (STL 已本地化，geom.pos = 0)."""
+    """生成手臂 MJCF XML 块 (STL 已本地化，geom.pos = 0).
+
+    结构: body(pitch) → child_body(roll + geoms)
+    """
     if not parts:
         return
 
@@ -578,27 +633,40 @@ def _gen_arm_xml(
     arm_world[2] += z_shift
     arm_body_pos = arm_world - body_world
 
+    # pitch 关节在父 body
     lines.append(
         f'      <body name="{arm_name}" '
         f'pos="{arm_body_pos[0]:.4f} {arm_body_pos[1]:.4f} {arm_body_pos[2]:.4f}">'
     )
     lines.append(
+        f'        <inertial pos="0 0 0" mass="0.015" diaginertia="1e-6 1e-6 1e-6"/>'
+    )
+    lines.append(
         f'        <joint name="{pitch_joint}" type="hinge" '
         f'axis="{pitch_axis}" range="-1.5708 1.5708" limited="true" />'
     )
+
+    # roll 关节在子 body
     lines.append(
-        f'        <joint name="{roll_joint}" type="hinge" '
+        f'        <body name="{arm_name}_roll">'
+    )
+    lines.append(
+        f'          <joint name="{roll_joint}" type="hinge" '
         f'axis="{roll_axis}" range="-0.7854 0.7854" limited="true" />'
     )
-    # STL 已本地化，geom.pos = 0
+
+    # STL 保持世界坐标，geom.pos 使用计算出的相对偏移
+    arm_mass = 0.015
     for p in parts:
+        gp = p.get("geom_pos", np.zeros(3))
         lines.append(
-            f'        <geom name="geom_{p["name"]}" type="mesh" '
+            f'          <geom name="geom_{p["name"]}" type="mesh" '
             f'mesh="mesh_{p["name"]}" '
-            f'pos="0 0 0" '
-            f'mass="0.001" rgba="0.4 0.6 0.3 1" />'
+            f'pos="{gp[0]:.4f} {gp[1]:.4f} {gp[2]:.4f}" '
+            f'mass="{arm_mass}" rgba="0.4 0.6 0.3 1" />'
         )
-    lines.append("      </body>")
+    lines.append("        </body>")  # roll body
+    lines.append("      </body>")    # pitch body
 
 
 def main():

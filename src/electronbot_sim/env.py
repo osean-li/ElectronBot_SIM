@@ -232,13 +232,23 @@ class ElectronBotEnv(gym.Env):
         self._joint_max = JOINT_MAX
 
         # 关节/执行器 name → id 映射 (对齐 MJCF 命名)
+        # 兼容 STEP 转换 MJCF: body 关节可能叫 "body_joint" 而非 "joint_body"
         self._joint_ids = {}
         self._actuator_ids = {}
-        for name in ["joint_rp", "joint_rr", "joint_lp", "joint_lr",
-                     "joint_body", "joint_head"]:
-            jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
-            if jid >= 0:
-                self._joint_ids[name] = jid
+        _joint_candidates = {
+            "joint_rp": ["joint_rp"],
+            "joint_rr": ["joint_rr"],
+            "joint_lp": ["joint_lp"],
+            "joint_lr": ["joint_lr"],
+            "joint_body": ["joint_body", "body_joint"],
+            "joint_head": ["joint_head"],
+        }
+        for canon, candidates in _joint_candidates.items():
+            for name in candidates:
+                jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
+                if jid >= 0:
+                    self._joint_ids[canon] = jid
+                    break
         for name in ["act_rp", "act_rr", "act_lp", "act_lr",
                      "act_body", "act_head"]:
             aid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
@@ -246,17 +256,31 @@ class ElectronBotEnv(gym.Env):
                 self._actuator_ids[name] = aid
 
         # 关节 qpos 索引 (按 [RP, RR, LP, LR, BODY, HEAD] 顺序)
+        # 兼容 STEP 转换 MJCF: body 关节可能叫 "body_joint" 而非 "joint_body"
+        _joint_name_map = {
+            "joint_rp": ["joint_rp"],
+            "joint_rr": ["joint_rr"],
+            "joint_lp": ["joint_lp"],
+            "joint_lr": ["joint_lr"],
+            "joint_body": ["joint_body", "body_joint"],
+            "joint_head": ["joint_head"],
+        }
+        def _resolve(canon):
+            for n in _joint_name_map[canon]:
+                if n in self._joint_ids:
+                    return self._joint_ids[n]
+            return None
         self._qpos_addr = np.array([
-            self.model.jnt_qposadr[self._joint_ids[n]]
+            self.model.jnt_qposadr[_resolve(n)]
             for n in ["joint_rp", "joint_rr", "joint_lp", "joint_lr",
                       "joint_body", "joint_head"]
-            if n in self._joint_ids
+            if _resolve(n) is not None
         ], dtype=int)
         self._qvel_addr = np.array([
-            self.model.jnt_dofadr[self._joint_ids[n]]
+            self.model.jnt_dofadr[_resolve(n)]
             for n in ["joint_rp", "joint_rr", "joint_lp", "joint_lr",
                       "joint_body", "joint_head"]
-            if n in self._joint_ids
+            if _resolve(n) is not None
         ], dtype=int)
         # 执行器顺序 (与 action 顺序一致)
         self._act_order = ["act_rp", "act_rr", "act_lp", "act_lr",
@@ -413,12 +437,12 @@ class ElectronBotEnv(gym.Env):
         cam = mujoco.MjvCamera()
         cam.lookat[:] = self.model.stat.center
         extent = self.model.stat.extent
-        cam.distance = float(self._camera_distance) if self._camera_distance else 0.25
+        cam.distance = float(self._camera_distance) if self._camera_distance else 0.3
         cam.azimuth = 90 if self._camera_distance else 135
-        cam.elevation = -5
+        cam.elevation = -10
         # 让 lookat 对准模型底部，确保看到地面接触
         if not self._camera_distance:
-            cam.lookat[2] = 0.01
+            cam.lookat[2] = 0.05
         return cam
 
     def render(self):

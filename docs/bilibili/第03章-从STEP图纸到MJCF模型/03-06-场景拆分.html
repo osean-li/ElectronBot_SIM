@@ -133,15 +133,21 @@ body{margin:0;background:var(--paper);color:var(--ink);
     <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">FreeCAD</span><span class="kw">STEP</span><span class="kw">STL</span><span class="kw">Inline Mesh</span><span class="kw">RK4</span><span class="kw">零件污染</span><span class="kw">`electronbot.xml`</span><span class="kw">测试加载</span></div>
   </header>
   <div class="section-background">
-  <div class="bg-title">📖 本节背景</div>
-  <div class="bg-body">将原始单文件拆分为两个文件： **`electronbot.xml`**：仅含机器人本体定义（`<mujoco>` ~ `</mujoco>` 中除场景外的全部内容），可独立加载。 **`electronbot_scene.xml`**：通过 `<include>` 引用机器人，独立管理场景元素：</div>
+  <div class="bg-title">📖 本节背景（v3.0 更新）</div>
+  <div class="bg-body">v3.0 采用<b>单文件方案</b>，不再拆分场景：<br/>1. 使用 <code>electronbot_step_meters.xml</code> 作为唯一模型文件（~103KB）<br/>2. 通过 <code>--render human</code> 参数启动 MCP 服务器时自动加载 MuJoCo 可视化窗口<br/>3. 相机距离 0.3m，lookat 高度 0.05m，确保模型完整显示在地面<br/>4. 347 个零件的外部 STL 引用使文件保持简洁，无需场景拆分<br/><br/>v2.0 曾尝试拆分场景文件，但 v3.0 的自动化流程和外部引用策略使单文件方案更优。</div>
 </div>
   
   
   <div class="knowledge-card summary">
-  <div class="kc-header">本节要点</div>
-  <div class="kc-body"><p>将原始单文件拆分为两个文件：</p></div>
-  <div class="kc-tags"><span class="kc-tag">FreeCAD</span><span class="kc-tag">STEP</span><span class="kc-tag">STL</span><span class="kc-tag">Inline Mesh</span></div>
+  <div class="kc-header">本节要点（v3.0 更新）</div>
+  <div class="kc-body"><p>v3.0 采用单文件方案，无需场景拆分：</p>
+  <ul>
+  <li>使用 <code>electronbot_step_meters.xml</code> 作为唯一模型文件</li>
+  <li>外部 STL 引用保持文件简洁（~103KB）</li>
+  <li>通过 MCP 服务器参数控制渲染和可视化</li>
+  <li>相机自动适配模型尺寸（距离 0.3m，lookat 0.05m）</li>
+  </ul></div>
+  <div class="kc-tags"><span class="kc-tag">单文件方案</span><span class="kc-tag">外部引用</span><span class="kc-tag">MCP服务器</span><span class="kc-tag">相机适配</span></div>
 </div>
   <table class="comparison-table">
 <tr><th>场景</th><th>包含关节</th><th>适用任务</th><th>策略复杂度</th></tr>
@@ -150,142 +156,166 @@ body{margin:0;background:var(--paper);color:var(--ink);
 <tr><td class="col-label">scene_dual</td><td>头部 2 + 双臂各 3</td><td>完整交互、拥抱</td><td>高（8 维动作）</td></tr>
 </table>
   <main class="content">
-<h2>3.9 场景拆分</h2>
-<p>将原始单文件拆分为两个文件：</p>
-<p><strong><code>electronbot.xml</code></strong>：仅含机器人本体定义（<code>&lt;mujoco&gt;</code> ~ <code>&lt;/mujoco&gt;</code> 中除场景外的全部内容），可独立加载。</p>
-<p><strong><code>electronbot_scene.xml</code></strong>：通过 <code>&lt;include&gt;</code> 引用机器人，独立管理场景元素：</p>
-<pre><code class="language-xml">&lt;mujoco model=&quot;electronbot scene&quot;&gt;
-  &lt;include file=&quot;electronbot.xml&quot;/&gt;
+<h2>3.9 场景管理（v3.0 更新）</h2>
+<h3>3.9.1 v3.0 单文件方案</h3>
+<p>v3.0 不再拆分场景文件，而是使用单文件方案：</p>
+<ul>
+<li>
+<p><b>唯一模型文件</b>：<code>assets/mjcf/electronbot_step_meters.xml</code>（~103KB）</p>
+</li>
+<li>
+<p><b>外部 STL 引用</b>：347 个零件独立存储在 <code>assets/meshes/step_parts/</code></p>
+</li>
+<li>
+<p><b>MCP 服务器控制</b>：通过 <code>--render human</code> 参数启动可视化窗口</p>
+</li>
+</ul>
+<pre><code class="language-bash"># 启动 MCP 服务器（带可视化）
+python3 -m electronbot_sim.mcp_server --render human
 
-  &lt;asset&gt;
-    &lt;texture type=&quot;2d&quot; name=&quot;groundplane&quot; builtin=&quot;checker&quot;
-             rgb1=&quot;0.50 0.60 0.72&quot; rgb2=&quot;0.06 0.13 0.22&quot;
-             markrgb=&quot;0.9 0.9 0.9&quot; width=&quot;300&quot; height=&quot;300&quot;/&gt;
-  &lt;/asset&gt;
-
-  &lt;worldbody&gt;
-    &lt;light pos=&quot;0 0 1.5&quot; dir=&quot;0 0 -1&quot; directional=&quot;true&quot;/&gt;
-    &lt;geom name=&quot;floor&quot; type=&quot;plane&quot; material=&quot;groundplane&quot;/&gt;
-  &lt;/worldbody&gt;
-&lt;/mujoco&gt;
+# 启动 MCP 服务器（无可视化，仅 WebSocket）
+python3 -m electronbot_sim.mcp_server
 </code></pre>
-<h3>3.9.1 场景拆分中的常见问题</h3>
+<h3>3.9.2 相机配置</h3>
+<p>v3.0 的相机配置确保模型完整显示在地面：</p>
+<pre><code class="language-python"># 在 mcp_server.py 中
+camera_distance = 0.3  # 米
+lookat_height = 0.05   # 米
+</code></pre>
+<p>这些参数确保：</p>
+<ul>
+<li>模型最低点接触地面（通过 <code>z_shift</code> 计算）</li>
+<li>相机距离适中，既能看到全貌又能看清细节</li>
+<li>lookat 高度略高于地面，避免视角过低</li>
+</ul>
+<h3>3.9.3 v2.0 场景拆分问题（历史参考）</h3>
+<p>v2.0 使用 inline mesh 时遇到的场景拆分问题（v3.0 已通过外部引用和坐标本地化解决）：</p>
 <table>
 <thead>
 <tr>
 <th>问题</th>
 <th>根因</th>
-<th>解决</th>
+<th>v3.0 解决方案</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>XML 文件被写空</td>
-<td>编辑器对大文件 <code>replace_in_file</code> 异常</td>
-<td>改用 Python 脚本；<code>git checkout</code> 恢复</td>
+<td>XML 文件过大（>10MB）</td>
+<td>347 个零件的 inline mesh 数据</td>
+<td>外部 STL 引用，XML 仅 ~103KB</td>
 </tr>
 <tr>
-<td>棋盘格地面不可见</td>
-<td>模型尺寸畸变（70m 高）致纹理对比度不足</td>
-<td>增大 rgb1/rgb2 差值；texrepeat 调至 0.05</td>
+<td>零件位置不对</td>
+<td>MuJoCo 自动中心化 mesh</td>
+<td>坐标本地化（世界坐标→父 body 相对坐标）</td>
+</tr>
+<tr>
+<td>模型悬空</td>
+<td>未计算最低点偏移</td>
+<td>脚本自动计算 <code>z_shift</code>，确保模型坐地</td>
 </tr>
 <tr>
 <td>零件断开</td>
 <td>缩放 mesh 后 body 位置未同步</td>
-<td>放弃缩放，仅调相机距离至 280m</td>
+<td>STL 顶点已在脚本中完成 mm→m 转换</td>
 </tr>
 <tr>
-<td>机器人悬空 47m</td>
-<td>body 原点与 mesh 底部偏移</td>
-<td><code>base_link pos z = 47.0</code></td>
-</tr>
-<tr>
-<td>EGL 渲染失败</td>
-<td>无桌面环境且未设置环境变量</td>
-<td>脚本开头加 <code>os.environ.setdefault("MUJOCO_GL","egl")</code></td>
-</tr>
-<tr>
-<td>渲染分辨率超限</td>
-<td>未设 offscreen framebuffer</td>
-<td>scene.xml 加 <code>&lt;global offwidth="960" offheight="720"/&gt;</code></td>
+<td>棋盘格地面不可见</td>
+<td>模型尺寸畸变（70m 高）</td>
+<td>模型尺寸正确（~0.2m 高），相机距离 0.3m</td>
 </tr>
 </tbody>
 </table>
-<h3>3.9.2 我的场景拆分过程</h3>
-<p>场景拆分是为了方便后面切换不同场景（桌面试、地面试、无场景纯模型试）。我的操作过程：</p>
+<h3>3.9.4 v3.0 场景管理流程</h3>
+<p>v3.0 的场景管理流程：</p>
 <ol>
 <li>
-<p><strong>从 <code>electronbot_full_arm.xml</code> 中提取模型本体</strong>：复制原来文件，删除 <code>&lt;asset&gt;</code> 中的场景纹理和 <code>&lt;worldbody&gt;</code> 中的地面几何体，只保留机器人 body 树，保存为 <code>electronbot.xml</code>。</p>
+<p><b>生成模型文件</b>：运行 <code>python scripts/step_to_mjcf.py</code>，自动生成 <code>electronbot_step_meters.xml</code> 和 347 个 STL 文件</p>
 </li>
 <li>
-<p><strong>创建 <code>electronbot_scene.xml</code></strong>：新建文件，通过 <code>&lt;include file="electronbot.xml"/&gt;</code> 引用模型，参考 <code>scene.xml</code> 的棋盘格设置添加场景元素。</p>
+<p><b>启动 MCP 服务器</b>：<code>python3 -m electronbot_sim.mcp_server --render human</code></p>
 </li>
 <li>
-<p><strong>测试加载</strong>：执行 <code>python3 -m mujoco.viewer --mjcf=assets/mjcf/electronbot_scene.xml</code>——模型加载成功，棋盘格地面显示为纯色，完全不对。</p>
+<p><b>自动加载可视化</b>：MuJoCo 窗口自动打开，相机自动适配模型尺寸</p>
 </li>
 <li>
-<p><strong>调试棋盘格问题</strong>：翻开发笔记，对照之前踩过的坑：</p>
+<p><b>WebSocket 控制</b>：通过 <code>ws://localhost:8080/ws</code> 发送动作指令</p>
 </li>
 </ol>
+<p>优势：</p>
 <ul>
-<li>
-<p>先确认模型尺寸：用 trimesh 测底座最低点在 z=-47m，机器人高 70m。</p>
-</li>
-<li>
-<p>棋盘格 <code>texrepeat</code> 从 1.0 改到 0.05，每格增大到 20m。</p>
-</li>
-<li>
-<p>亮暗格颜色从接近的 <code>0.2/0.1</code> 改为差别大的 <code>0.50/0.06</code>。</p>
-</li>
-<li>
-<p>重新加载，棋盘格显示正常。</p>
-</li>
+<li>无需手动管理场景文件</li>
+<li>相机参数自动适配，无需手动调整</li>
+<li>模型文件简洁，易于版本管理</li>
+<li>通过 MCP 服务器参数控制渲染模式</li>
 </ul>
-<ol start="5">
-<li>
-<p><strong>修正底座位置</strong>：<code>base_link pos z</code> 从 <code>0.015</code> 改为 <code>47.0</code>，机器人落回地面。</p>
-</li>
-<li>
-<p><strong>修正相机距离</strong>：<code>cam.distance = 280.0</code> 保证全貌可见。</p>
-</li>
-<li>
-<p><strong>记录 6 个问题</strong>：将整个过程遇到的 6 个问题整理成章节表格，方便后续查询。</p>
-</li>
-</ol>
-<h2>3.10 本章小结</h2>
-<p>本章从 STEP 原始 CAD 出发，经过零件分组、STL 合并导出、Inline Mesh XML 生成、稳定性调优及场景拆分，最终得到完整的 MJCF 模型文件。</p>
-<p>与设计文档的主要差异：</p>
+<h2>3.10 本章小结（v3.0 更新）</h2>
+<p>本章从 STEP 原始 CAD 出发，经过<b>自动化零件提取</b>、<b>坐标本地化</b>、<b>外部 STL 引用</b>、<b>稳定性调优</b>，最终得到完整的 MJCF 模型文件。</p>
+<p>v3.0 与设计文档的主要差异：</p>
 <table>
 <thead>
 <tr>
 <th>项目</th>
-<th>设计文档</th>
-<th>实际实现</th>
+<th>设计文档（v2.0）</th>
+<th>v3.0 实现</th>
 </tr>
 </thead>
 <tbody>
 <tr>
+<td>零件提取</td>
+<td>FreeCAD 手动导出 24 零件</td>
+<td>cascadio + trimesh 自动提取 347 零件</td>
+</tr>
+<tr>
 <td>STL 导出策略</td>
-<td>24 零件分别导出</td>
 <td>按 5 运动组合并导出</td>
+<td>每个零件独立 STL</td>
+</tr>
+<tr>
+<td>MJCF 方案</td>
+<td>Inline Mesh（单文件 >10MB）</td>
+<td>外部 STL 引用（XML ~103KB）</td>
+</tr>
+<tr>
+<td>坐标处理</td>
+<td>MuJoCo 自动中心化</td>
+<td>脚本坐标本地化（世界坐标→父 body 相对坐标）</td>
 </tr>
 <tr>
 <td>积分器</td>
 <td>implicitfast</td>
-<td>RK4</td>
+<td>RK4（仍然必要）</td>
 </tr>
 <tr>
-<td>场景文件</td>
-<td>2 个独立场景</td>
-<td>统一为 1 个 scene.xml</td>
+<td>场景管理</td>
+<td>2 个独立场景文件</td>
+<td>单文件方案，MCP 服务器控制渲染</td>
 </tr>
 <tr>
 <td>模型尺寸</td>
+<td>mm→m 未缩放，模型高 70m</td>
+<td>脚本自动转换，模型高 ~0.2m，相机距 0.3m</td>
+</tr>
+<tr>
+<td>零件质量</td>
 <td>未指定</td>
-<td>mm→m 未缩放，模型高 70m，相机距 280m</td>
+<td>0.01-0.015kg，总质量 ~3.5kg</td>
+</tr>
+<tr>
+<td>执行器增益</td>
+<td>kp=20, kv=1</td>
+<td>kp=5, kv=2（抑制振荡）</td>
 </tr>
 </tbody>
 </table>
+<h3>v3.0 关键改进</h3>
+<ol>
+<li><b>自动化提取</b>：从 24 个手动导出零件到 347 个自动提取零件，大幅提高建模精度</li>
+<li><b>坐标本地化</b>：避免 MuJoCo 自动中心化导致的惯性参数放大 10¹² 倍</li>
+<li><b>外部引用</b>：XML 文件从 >10MB 降至 ~103KB，易于版本管理和编辑</li>
+<li><b>质量优化</b>：零件质量控制在合理范围，避免仿真不稳定</li>
+<li><b>单文件方案</b>：无需场景拆分，通过 MCP 服务器参数控制渲染模式</li>
+</ol>
   </main>
   <div class="glossary-section">
   <div class="gs-title">🔑 关键词释义</div>

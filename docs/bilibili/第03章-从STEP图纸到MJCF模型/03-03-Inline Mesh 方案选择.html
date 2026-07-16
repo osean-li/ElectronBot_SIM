@@ -125,7 +125,7 @@ body{margin:0;background:var(--paper);color:var(--ink);
 <article class="book-page">
   <header class="chap-header">
     <div class="chap-kicker">第 03 章 · L1 模型描述层  —  子章节 8/21</div>
-    <h1>3.5 Inline Mesh 方案选择</h1>
+    <h1>3.5 外部 STL 引用方案选择（v3.0 更新）</h1>
     <div class="chap-meta">
       <span>阅读约 4 分钟</span>
       <span>1,069 字</span>
@@ -133,8 +133,8 @@ body{margin:0;background:var(--paper);color:var(--ink);
     <div class="keywords"><span class="kw-label">核心关键词</span><span class="kw">FreeCAD</span><span class="kw">STEP</span><span class="kw">STL</span><span class="kw">Inline Mesh</span><span class="kw">RK4</span><span class="kw">零件污染</span><span class="kw">方式 A：外部 STL 引用</span><span class="kw">单位问题</span></div>
   </header>
   <div class="section-background">
-  <div class="bg-title">📖 本节背景</div>
-  <div class="bg-body">MJCF 支持两种加载 3D 几何的方式： **方式 A：外部 STL 引用** <compiler meshscale="0.001"/> <mesh name="body" file="../meshes/body.stl"/></div>
+  <div class="bg-title">📖 本节背景（v3.0 更新）</div>
+  <div class="bg-body">MJCF 支持两种加载 3D 几何的方式：<br/><b>方式 A：外部 STL 引用（v3.0 选用）</b><br/><code>&lt;compiler meshscale="0.001"/&gt;</code><br/><code>&lt;mesh name="body" file="../meshes/body.stl"/&gt;</code><br/><br/><b>方式 B：Inline Mesh（v2.0 使用）</b><br/><code>&lt;mesh name="body" vertex="0.0012 0.0035 ..." face="0 1 2 ..."/&gt;</code><br/><br/>v3.0 选择外部 STL 引用的原因：347 个独立零件使 inline mesh 文件过大（>10MB），外部引用保持 XML 简洁（~103KB），且便于单独更新零件。</div>
 </div>
   
   
@@ -144,49 +144,89 @@ body{margin:0;background:var(--paper);color:var(--ink);
   <div class="kc-tags"><span class="kc-tag">FreeCAD</span><span class="kc-tag">STEP</span><span class="kc-tag">STL</span><span class="kc-tag">Inline Mesh</span></div>
 </div>
   <table class="comparison-table">
-<tr><th>维度</th><th>Inline Mesh</th><th>External Mesh</th></tr>
-<tr><td class="col-label">自包含性</td><td>✅ 单 XML 文件包含全部</td><td>❌ 需维护 .stl 路径引用</td></tr>
-<tr><td class="col-label">跨平台</td><td>✅ 纯文本，换行符无影响</td><td>⚠️ 路径分隔符差异</td></tr>
-<tr><td class="col-label">可读性</td><td>⚠️ 大网格使文件膨胀</td><td>✅ XML 简洁，网格独立</td></tr>
-<tr><td class="col-label">加载性能</td><td>解析时一并加载</td><td>可按需缓存</td></tr>
-<tr><td class="col-label">版本管理</td><td>✅ 单文件 diff 友好</td><td>⚠️ 双文件需同步</td></tr>
-<tr><td class="col-label">本项目选择</td><td colspan="2"><b>Inline Mesh</b> — 优先教学便利性和跨平台一致性</td></tr>
+<tr><th>维度</th><th>Inline Mesh（v2.0）</th><th>External Mesh（v3.0 选用）</th></tr>
+<tr><td class="col-label">自包含性</td><td>✅ 单 XML 文件包含全部</td><td>⚠️ 需维护 .stl 路径引用</td></tr>
+<tr><td class="col-label">跨平台</td><td>✅ 纯文本，换行符无影响</td><td>⚠️ 路径分隔符差异（已解决）</td></tr>
+<tr><td class="col-label">可读性</td><td>❌ 347 零件使文件 >10MB</td><td>✅ XML 简洁（~103KB），网格独立</td></tr>
+<tr><td class="col-label">加载性能</td><td>解析时一并加载</td><td>✅ 可按需缓存，MuJoCo 自动处理</td></tr>
+<tr><td class="col-label">版本管理</td><td>❌ 大文件 diff 困难</td><td>✅ XML 小文件易管理，STL 独立更新</td></tr>
+<tr><td class="col-label">零件更新</td><td>❌ 需重新生成整个 XML</td><td>✅ 单独替换 STL 文件即可</td></tr>
+<tr><td class="col-label">本项目选择</td><td>v2.0 使用（24 零件）</td><td><b>v3.0 选用</b> — 347 零件场景下更优</td></tr>
 </table>
   <main class="content">
-<h2>3.5 Inline Mesh 方案选择</h2>
+<h2>3.5 外部 STL 引用方案选择（v3.0）</h2>
 <p>MJCF 支持两种加载 3D 几何的方式：</p>
-<p><strong>方式 A：外部 STL 引用</strong></p>
+<p><strong>方式 A：外部 STL 引用（v3.0 选用）</strong></p>
 <pre><code class="language-xml">&lt;compiler meshscale=&quot;0.001&quot;/&gt;
-&lt;mesh name=&quot;body&quot; file=&quot;../meshes/body.stl&quot;/&gt;
+&lt;mesh name=&quot;body_part001&quot; file=&quot;../meshes/step_parts/body_part001_local.stl&quot;/&gt;
+&lt;mesh name=&quot;body_part002&quot; file=&quot;../meshes/step_parts/body_part002_local.stl&quot;/&gt;
+&lt;!-- ... 347 个零件 ... --&gt;
 </code></pre>
-<p><strong>方式 B：Inline Mesh（本项目选用）</strong></p>
+<p><strong>方式 B：Inline Mesh（v2.0 使用）</strong></p>
 <pre><code class="language-xml">&lt;mesh name=&quot;body&quot; vertex=&quot;0.0012 0.0035 ...&quot; face=&quot;0 1 2 ...&quot;/&gt;
 </code></pre>
-<p>选择方式 B 的原因有三：</p>
+<p>v3.0 选择方式 A 的原因：</p>
 <ol>
 <li>
-<p><strong>单位问题</strong>。STL 默认单位为 mm，MuJoCo 内部使用 m。外部引用需加 <code>meshscale="0.001"</code> 缩放；Inline 方案由脚本在生成时完成 mm→m 转换。</p>
+<p><strong>文件大小</strong>。347 个零件的 inline mesh 会使 XML 文件超过 10MB，难以编辑和版本管理。外部引用保持 XML 简洁（~103KB）。</p>
 </li>
 <li>
-<p><strong>路径问题</strong>。外部 STL 路径相对于 XML 文件位置，迁移环境时易出错。Inline 方案单文件自包含。</p>
+<p><strong>零件独立性</strong>。每个零件独立 STL 文件，便于单独更新、调试和替换。</p>
 </li>
 <li>
-<p><strong>自动中心化</strong>。MuJoCo 编译 Inline Mesh 时自动将 mesh 质心移到 body 原点，使得 <code>geom pos</code> 偏移可通过脚本精确计算。外部 STL 无此特性，需手动测量。</p>
+<p><strong>坐标本地化</strong>。v3.0 通过脚本自动完成坐标转换（世界坐标→父 body 相对坐标），外部 STL 已包含正确的 local 坐标，无需 MuJoCo 自动中心化。</p>
+</li>
+<li>
+<p><strong>单位处理</strong>。STL 顶点已在脚本中完成 mm→m 转换，无需 <code>meshscale</code>。</p>
 </li>
 </ol>
-<h2>3.6 MuJoCo 自动中心化与偏移计算</h2>
-<h3>3.6.1 自动中心化的影响</h3>
-<p>检查导出的 STL 包围盒发现：<code>left_arm_fc.stl</code> 的质心在 X=-18.2mm，但 MuJoCo 编译后会被平移到 X=0。而 FreeCAD 装配中左臂的旋转 pivot 在 X=-18mm，因此需要额外补偿。</p>
-<h3>3.6.2 Geom 偏移量计算</h3>
-<pre><code class="language-python">body_hw = 27.9   # 身体半宽 (mm)
-arm_hw  = 16.7   # 手臂半宽 (mm)
-left_body_pos = -0.018  # FreeCAD pivot 位置 (m)
-
-left_geom_off = -(body_hw - abs(left_body_pos * 1000) + arm_hw - 1) / 1000.0
-#              = -(27.9 - 18.0 + 16.7 - 1) / 1000
-#              = -0.0256 (m)
+<h2>3.6 v3.0 坐标本地化方案</h2>
+<h3>3.6.1 v2.0 自动中心化问题</h3>
+<p>v2.0 使用 inline mesh 时，MuJoCo 会自动将 mesh 质心移到 body 原点，导致需要手动计算补偿偏移。例如左臂质心在 X=-18.2mm，需要额外偏移 -0.0256m。</p>
+<h3>3.6.2 v3.0 本地化方案</h3>
+<p>v3.0 通过脚本在导出 STL 时完成坐标转换，使每个零件的顶点已经是相对于父 body 的 local 坐标：</p>
+<pre><code class="language-python"># 坐标转换流程
+def _localize_parts(parts, parent_world_pos):
+    &quot;&quot;&quot;将 STL 顶点从世界坐标转换为相对于父 body 的 local 坐标
+    注意：parent_world_pos 已经包含 z_shift，所以 local 坐标 = worldVertex - parent_world_pos
+    最终显示位置 = body.pos + localVertex = parent_world_pos + (worldVertex - parent_world_pos) = worldVertex
+    但 worldVertex 需要加 z_shift 才能坐地，所以 local 坐标 = (worldVertex + z_shift) - parent_world_pos
+    &quot;&quot;&quot;
+    for p in parts:
+        stl_path = stl_base / p[&quot;stl&quot;]
+        # 读取 STL，将顶点加 z_shift，再减去 parent_world_pos
+        import trimesh
+        mesh = trimesh.load(stl_path)
+        # 顶点加 z_shift（让模型坐地）
+        mesh.vertices[:, 2] += z_shift
+        # 转换为 local 坐标（减去父 body 世界位置）
+        mesh.vertices -= parent_world_pos
+        local_path = stl_path.with_name(stl_path.stem + &quot;_local.stl&quot;)
+        mesh.export(local_path)
+        p[&quot;local_stl&quot;] = local_path.name
+    return parts
 </code></pre>
-<p>结果：左臂 <code>geom pos</code> 需额外偏移 -0.0256m，右臂偏移 +0.0256m。</p>
+<p>关键点：</p>
+<ul>
+<li>
+<p><code>geom.pos = 0</code>：几何体无额外偏移</p>
+</li>
+<li>
+<p>最终显示位置 = <code>body.pos + geom.pos + localVertex</code> = <code>parent_world_pos + 0 + (worldVertex + z_shift - parent_world_pos)</code> = <code>worldVertex + z_shift</code></p>
+</li>
+<li>
+<p>这样确保零件显示在正确位置，且模型最低点接触地面</p>
+</li>
+</ul>
+<h3>3.6.3 手臂 Y 轴偏移</h3>
+<p>为避免手臂旋转时与主体碰撞，v3.0 在 MJCF 中为手臂几何体添加 Y 轴偏移：</p>
+<pre><code class="language-xml">&lt;body name=&quot;left_arm_pitch&quot;&gt;
+  &lt;joint name=&quot;left_pitch_joint&quot; type=&quot;hinge&quot; axis=&quot;0 1 0&quot; range=&quot;-1.5708 1.5708&quot;/&gt;
+  &lt;geom type=&quot;mesh&quot; mesh=&quot;left_arm_part001_local&quot; pos=&quot;0 0.04 0&quot;/&gt;
+  &lt;!-- Y 轴偏移 4cm --&gt;
+&lt;/body&gt;
+</code></pre>
+<p>这个偏移使手臂在 pitch 旋转时不会穿透主体。</p>
   </main>
   <div class="glossary-section">
   <div class="gs-title">🔑 关键词释义</div>

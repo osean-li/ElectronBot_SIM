@@ -194,6 +194,20 @@ MCP_TOOLS: List[Dict[str, Any]] = [
         "sim_only": True,
         "input_schema": {"type": "object", "properties": {}},
     },
+    # ── 组合动作工具 ──
+    {
+        "name": "self.electron.combo_action",
+        "description": "组合动作：1=挥手告别 (挥手+点头) 2=表示同意 (点头+举手) 3=环顾四周 (左转+右转)",
+        "sim_only": False,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "combo": {"type": "integer", "enum": [1, 2, 3]},
+                "speed": {"type": "integer", "minimum": 100, "maximum": 2000, "default": 800},
+            },
+            "required": ["combo"],
+        },
+    },
 ]
 
 # 工具名 → 处理函数名的映射 (在 McpSimBridge._register_tools 中填充)
@@ -210,6 +224,7 @@ _TOOL_HANDLERS: Dict[str, str] = {
     "self.electron.servo_sequences": "_servo_sequences",
     "self.electron.home": "_home",
     "self.electron.get_ip": "_get_ip",
+    "self.electron.combo_action": "_combo_action",
 }
 
 
@@ -470,77 +485,141 @@ class McpSimBridge:
                      speed: int = 1000, amount: int = 30, **kwargs) -> Dict:
         """预设手部动作 (对齐固件 HandAction).
 
-        action: 1=举手 2=放手 3=挥手 4=拍打
+        action: 1=举手 2=放手 3=挥手 4=拍打 5=双手举起 6=挥挥手 7=拍拍手 8=放下手臂
         hand:   1=左手 2=右手 3=双手
         steps:  重复次数 (固件: times = 2 * max(3, min(100, steps)))
         speed:  动作速度 (ms), 越小越快
         amount: 动作幅度 (10-50), 仅举手使用
         """
-        if action not in (1, 2, 3, 4):
-            return {"error": "action 必须为 1-4"}
+        if action not in (1, 2, 3, 4, 5, 6, 7, 8):
+            return {"error": "action 必须为 1-8"}
         if hand not in (1, 2, 3):
             return {"error": "hand 必须为 1-3"}
 
         # 固件 times 限制 (对齐 movements.cc:225)
         times = 2 * max(3, min(100, int(steps)))
 
-        # 当前舵机角度
-        current_joint = self.env._get_joint_angles_deg()
-        current_servo = joint_array_to_servo_array(current_joint)
-
-        # 根据动作类型构造目标
         # 索引: 0=RP 1=RR 2=LP 3=LR 4=BODY 5=HEAD
-        for _ in range(times):
-            if action == 1:  # 举手: full_arm 模型手臂朝前(+Y), 需 roll 关节(LR/RR)绕 X 轴抬手; pitch 仅拧转
+        # STEP 模型: LP/RP 是 pitch 关节(绕Y轴)，用于上下举手
+        #           LR/RR 是 roll 关节(绕X轴)，用于左右摆动
+
+        # action 1-4: 需要循环重复 (挥手/拍打等)
+        if action in (1, 2, 3, 4):
+            for _ in range(times):
+                current_joint = self.env._get_joint_angles_deg()
+                if action == 1:  # 举手: roll 关节(LR/RR)向上旋转
+                    targets_joint = current_joint.copy()
+                    if hand in (1, 3):  # 左手
+                        targets_joint[3] = 45    # LR roll +45° (向上举起)
+                    if hand in (2, 3):  # 右手
+                        targets_joint[1] = -45   # RR roll -45° (向上举起)
+                    logger.info("hand_action targets_joint: %s", targets_joint)
+                    self._move_to_joints(targets_joint, speed)
+
+                elif action == 2:  # 放手: 回正
+                    targets_joint = current_joint.copy()
+                    if hand in (1, 3):
+                        targets_joint[3] = 0
+                    if hand in (2, 3):
+                        targets_joint[1] = 0
+                    self._move_to_joints(targets_joint, speed)
+
+                elif action == 3:  # 挥手
+                    raise_targets = current_joint.copy()
+                    if hand in (1, 3):
+                        raise_targets[3] = 45
+                    if hand in (2, 3):
+                        raise_targets[1] = -45
+                    self._move_to_joints(raise_targets, speed)
+
+                    wave_left = raise_targets.copy()
+                    wave_right = raise_targets.copy()
+                    if hand in (1, 3):
+                        wave_left[2] = 30
+                        wave_right[2] = -30
+                    if hand in (2, 3):
+                        wave_left[0] = 30
+                        wave_right[0] = -30
+                    self._move_to_joints(wave_left, speed // 2)
+                    self._move_to_joints(wave_right, speed // 2)
+
+                elif action == 4:  # 拍打
+                    amount = min(amount, 40)
+                    targets = current_joint.copy()
+                    if hand in (1, 3):
+                        targets[3] = 45 - amount
+                    if hand in (2, 3):
+                        targets[1] = -45 + amount
+                    self._move_to_joints(targets, speed)
+
+        else:
+            # action 5-8: 单次动作, 不循环
+            current_joint = self.env._get_joint_angles_deg()
+
+            if action == 5:  # 双手举起: pitch + roll 配合 (手臂水平伸出)
                 targets_joint = current_joint.copy()
-                if hand in (1, 3):  # 左手: roll 抬手
-                    targets_joint[3] = 90   # LR +90° (关节限幅 ±45°, 实际抬升 ~21mm)
-                if hand in (2, 3):  # 右手: roll 抬手
-                    targets_joint[1] = 90   # RR +90° 抬升
+                if hand in (1, 3):  # 左手
+                    targets_joint[2] = -90   # LP pitch -90° (水平伸出)
+                    targets_joint[3] = 45    # LR roll +45°
+                if hand in (2, 3):  # 右手
+                    targets_joint[0] = -90   # RP pitch -90° (水平伸出)
+                    targets_joint[1] = -45   # RR roll -45°
+                logger.info("hand_action 双手举起 targets_joint: %s", targets_joint)
                 self._move_to_joints(targets_joint, speed)
 
-            elif action == 2:  # 放手: roll 关节回正
+            elif action == 6:  # 挥挥手: 举起 + pitch 摆动
+                raise_targets = current_joint.copy()
+                if hand in (1, 3):
+                    raise_targets[2] = -90
+                    raise_targets[3] = 45
+                if hand in (2, 3):
+                    raise_targets[0] = -90
+                    raise_targets[1] = -45
+                self._move_to_joints(raise_targets, speed)
+
+                # pitch 摆动模拟挥手
+                for _ in range(2):
+                    current_joint = self.env._get_joint_angles_deg()
+                    wave1 = current_joint.copy()
+                    wave2 = current_joint.copy()
+                    if hand in (1, 3):
+                        wave1[2] = -60
+                        wave2[2] = -120
+                    if hand in (2, 3):
+                        wave1[0] = -60
+                        wave2[0] = -120
+                    self._move_to_joints(wave1, speed // 2)
+                    self._move_to_joints(wave2, speed // 2)
+
+            elif action == 7:  # 拍拍手: 双手举起后快速放下
+                raise_targets = current_joint.copy()
+                if hand in (1, 3):
+                    raise_targets[2] = -90
+                    raise_targets[3] = 45
+                if hand in (2, 3):
+                    raise_targets[0] = -90
+                    raise_targets[1] = -45
+                self._move_to_joints(raise_targets, speed)
+
+                # 快速放下
+                drop_targets = raise_targets.copy()
+                if hand in (1, 3):
+                    drop_targets[2] = 0
+                    drop_targets[3] = 0
+                if hand in (2, 3):
+                    drop_targets[0] = 0
+                    drop_targets[1] = 0
+                self._move_to_joints(drop_targets, speed // 3)
+
+            elif action == 8:  # 放下手臂: 回正
                 targets_joint = current_joint.copy()
                 if hand in (1, 3):
-                    targets_joint[3] = 0   # LR 回正
+                    targets_joint[2] = 0
+                    targets_joint[3] = 0
                 if hand in (2, 3):
-                    targets_joint[1] = 0   # RR 回正
+                    targets_joint[0] = 0
+                    targets_joint[1] = 0
                 self._move_to_joints(targets_joint, speed)
-
-            elif action == 3:  # 挥手
-                # 挥手: 抬起 → 摆动 → 放下
-                # 起始位: 抬手
-                raise_targets = current_servo.copy()
-                if hand in (1, 3):
-                    raise_targets[3] = 90   # LR 抬起位 (roll)
-                if hand in (2, 3):
-                    raise_targets[1] = 90   # RR 抬起位 (roll)
-                self._move_all_servos(raise_targets, speed)
-
-                # 摆动 (roll 来回)
-                wave_left = raise_targets.copy()
-                wave_right = raise_targets.copy()
-                if hand in (1, 3):
-                    wave_left[3] = 60   # LR 外摆
-                    wave_right[3] = 20  # LR 内收
-                if hand in (2, 3):
-                    wave_left[1] = 120  # RR 外摆
-                    wave_right[1] = 160  # RR 内收
-                self._move_all_servos(wave_left, speed // 2)
-                self._move_all_servos(wave_right, speed // 2)
-
-            elif action == 4:  # 拍打
-                amount = min(amount, 40)  # 固件上限
-                targets = current_servo.copy()
-                if hand in (1, 3):
-                    # LR roll 上下拍打
-                    targets[3] = 90 + amount
-                if hand in (2, 3):
-                    # RR roll 上下拍打 (反向)
-                    targets[1] = 90 - amount
-                self._move_all_servos(targets, speed)
-                # 回到原位
-                self._move_all_servos(current_servo, speed)
 
         return {"status": "ok", "action": action, "hand": hand, "times": times}
 
@@ -785,6 +864,39 @@ class McpSimBridge:
     def _get_ip(self, **kwargs) -> Dict:
         """[@sim_only] 查询设备 IP (仿真虚构)."""
         return {"ip": self._device_ip}
+
+    def _combo_action(self, combo: int, speed: int = 800, **kwargs) -> Dict:
+        """组合动作.
+
+        combo: 1=挥手告别 (挥手+点头) 2=表示同意 (点头+举手) 3=环顾四周 (左转+右转)
+        speed: 动作速度 (ms)
+        """
+        if combo not in (1, 2, 3):
+            return {"error": "combo 必须为 1-3"}
+
+        if combo == 1:  # 挥手告别: 挥手 + 点头
+            # 先挥手
+            self._hand_action(action=3, hand=3, steps=1, speed=speed)
+            # 再点头
+            self._head_move(action=3, angle=8, speed=speed, steps=1)
+
+        elif combo == 2:  # 表示同意: 点头 + 举手
+            # 先点头
+            self._head_move(action=3, angle=8, speed=speed, steps=1)
+            # 再举手
+            self._hand_action(action=5, hand=3, steps=1, speed=speed)
+
+        elif combo == 3:  # 环顾四周: 左转 + 右转
+            # 左转
+            self._body_turn(direction=1, angle=30, speed=speed, steps=1)
+            # 回正
+            self._body_turn(direction=3, speed=speed, steps=1)
+            # 右转
+            self._body_turn(direction=2, angle=30, speed=speed, steps=1)
+            # 回正
+            self._body_turn(direction=3, speed=speed, steps=1)
+
+        return {"status": "ok", "combo": combo}
 
     # ================================================================
     #  状态查询 (供 Backend / 调试用)
