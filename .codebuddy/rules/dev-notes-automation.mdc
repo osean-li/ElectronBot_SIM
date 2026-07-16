@@ -1,0 +1,43 @@
+---
+alwaysApply: true
+description: 解决技术问题/Bug修复/功能完成后必须自动创建开发笔记
+---
+
+# 开发笔记自动记录规则
+
+每次解决一个技术问题、修复一个 Bug、或完成一个功能模块后，**必须自动**在 `docs/notes/` 下创建开发笔记。
+
+## 文件命名
+
+`dev-note-YYYY-MM-DD-简短描述.md`（如 `dev-note-2026-07-07-fix-arm-explosion.md`）
+
+## 格式模板
+
+遵循 [docs/notes/TEMPLATE_开发笔记.md](mdc:docs/notes/TEMPLATE_开发笔记.md)，包含：
+
+| 章节 | 内容要求 |
+|------|---------|
+| 背景 | 简述遇到的问题，什么情况下发生 |
+| 根因分析 | 分析问题原因 |
+| 解决方案 | 具体步骤 + 代码/命令 |
+| 截图(可选) | 如有可视化效果变化，用 MuJoCo EGL 渲染保存前后对比截图到 `docs/notes/screenshots/` |
+| 影响范围 | 修改的文件和改动内容（表格格式） |
+| 经验总结 | 问题→根因→规范做法（表格格式） |
+
+## 截图命令参考
+
+```python
+import os; os.environ.setdefault("MUJOCO_GL", "egl")
+import mujoco
+model = mujoco.MjModel.from_xml_path('assets/mjcf/scene_tabletop.xml')
+renderer = mujoco.Renderer(model, 720, 960)
+data = mujoco.MjData(model)
+mujoco.mj_forward(model, data)
+renderer.update_scene(data)
+import imageio; imageio.imwrite('docs/notes/screenshots/xxxx.png', renderer.render())
+```
+
+## 已有笔记参考
+
+- [docs/notes/dev-notes-freecad-mujoco-arm.md](mdc:docs/notes/dev-notes-freecad-mujoco-arm.md)
+- [docs/notes/场景切换指南.md](mdc:docs/notes/场景切换指南.md)

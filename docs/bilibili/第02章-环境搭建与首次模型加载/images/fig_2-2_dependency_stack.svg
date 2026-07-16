@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" width="100%" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+  <rect x="0" y="0" width="960" height="500" fill="#FFFFFF"/>
+  <text x="480" y="44" text-anchor="middle" font-size="24" font-weight="600" fill="#1E293B">MuJoCo 依赖栈 —— 极简设计</text>
+  <text x="480" y="72" text-anchor="middle" font-size="14" fill="#64748B">无需 Docker · 无需 ROS · 无需 GPU（最低 4 核 CPU + 16GB RAM）</text>
+
+  <!-- Layer 4: app / AI deps -->
+  <rect x="230" y="104" width="500" height="60" rx="10" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.8"/>
+  <text x="480" y="130" text-anchor="middle" font-size="16" font-weight="600" fill="#1F5C9E">Gymnasium · NumPy · SciPy · OpenCV · trimesh</text>
+  <text x="480" y="152" text-anchor="middle" font-size="12.5" fill="#64748B">RL 环境接口 / 数值计算 / 图像处理（第四章正式使用）</text>
+  <text x="748" y="138" font-size="12.5" fill="#94A3B8">— 上层生态</text>
+
+  <!-- Layer 3: MuJoCo -->
+  <rect x="230" y="180" width="500" height="60" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.8"/>
+  <text x="480" y="206" text-anchor="middle" font-size="16" font-weight="600" fill="#137A57">MuJoCo 3.x（核心物理引擎）</text>
+  <text x="480" y="228" text-anchor="middle" font-size="12.5" fill="#64748B">刚体动力学 · 碰撞检测 · 关节运动　要求 ≥ 3.2.0</text>
+  <text x="748" y="214" font-size="12.5" fill="#94A3B8">— 物理心脏</text>
+
+  <!-- Layer 2: venv -->
+  <rect x="230" y="256" width="500" height="60" rx="10" fill="#EEEDFE" stroke="#7F77DD" stroke-width="0.8"/>
+  <text x="480" y="282" text-anchor="middle" font-size="16" font-weight="600" fill="#4B44A8">Python venv 虚拟环境（.venv）</text>
+  <text x="480" y="304" text-anchor="middle" font-size="12.5" fill="#64748B">隔离项目依赖，避免污染系统 Python</text>
+  <text x="748" y="290" font-size="12.5" fill="#94A3B8">— 隔离层</text>
+
+  <!-- Layer 1: Python -->
+  <rect x="230" y="332" width="500" height="60" rx="10" fill="#EEF4F8" stroke="#0F2A4A" stroke-width="0.8"/>
+  <text x="480" y="358" text-anchor="middle" font-size="16" font-weight="600" fill="#0F2A4A">Python 3.11（硬要求）</text>
+  <text x="480" y="380" text-anchor="middle" font-size="12.5" fill="#64748B">AI 生态最稳定版本；低于 3.10 部分 binding 不可用</text>
+  <text x="748" y="366" font-size="12.5" fill="#94A3B8">— 地基</text>
+
+  <!-- render options -->
+  <rect x="230" y="410" width="240" height="66" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+  <text x="350" y="436" text-anchor="middle" font-size="15" font-weight="600" fill="#B4471F">GLFW</text>
+  <text x="350" y="458" text-anchor="middle" font-size="12" fill="#64748B">本地窗口渲染 · 看机器人</text>
+
+  <rect x="490" y="410" width="240" height="66" rx="10" fill="#FAECE7" stroke="#D85A30" stroke-width="0.8"/>
+  <text x="610" y="436" text-anchor="middle" font-size="15" font-weight="600" fill="#B4471F">EGL</text>
+  <text x="610" y="458" text-anchor="middle" font-size="12" fill="#64748B">无头离屏渲染 · 服务器训练</text>
+</svg>

@@ -1,0 +1,58 @@
+---
+alwaysApply: true
+description: 环境配置、命令执行偏好和常用命令速查
+---
+
+# 环境与命令规则
+
+## 命令执行偏好
+
+- **命令自动执行**：所有命令自动执行不弹确认框，调用 `execute_command` 时强制 `requires_approval=False`
+- **sudo 提权**：sudo 密码为 `1`，提权方式：`echo 1 | sudo -S <command>`
+
+## 关键环境变量
+
+| 变量 | 值 | 说明 |
+|------|-----|------|
+| `MUJOCO_GL` | **`egl`** | **必须设置**，否则渲染为全灰度（OSMesa 在此环境输出纯灰度） |
+| `ELECTRONBOT_SIM_ASSETS_PATH` | 默认 `assets/mjcf/` | MjCF 模型路径覆盖 |
+| `ELECTRONBOT_SIM_DISABLE_DR` | `1` | 禁用域随机化 |
+| `ELECTRONBOT_SIM_DT` | 默认 `0.02` | 仿真步长 |
+| `ELECTRONBOT_SIM_HEADLESS` | `1` | 无头模式 |
+
+## 常用命令
+
+### 安装
+
+```bash
+pip install -e .                     # 基础安装（仿真核心）
+pip install -e ".[full]"             # 全量安装（AI训练 + 所有可选依赖）
+pip install -e ".[ai]"               # AI 训练管线
+pip install -e ".[dev]"              # 开发工具（pytest, ruff）
+pip install -e ".[sensors]"          # OpenCV 相机
+```
+
+### 测试
+
+```bash
+pytest tests/ -v                                          # 全部测试
+pytest tests/test_env.py -v                               # 单文件
+pytest tests/ -v -k "reset"                               # 关键字过滤
+pytest tests/ -v -m "not slow and not gpu"                # 跳过慢速/GPU测试
+pytest tests/ -v --cov=electronbot_sim --cov-report=html  # 覆盖率
+```
+
+### Lint
+
+```bash
+ruff check src/
+```
+
+### 运行 Demo
+
+```bash
+python demos/01-CAD-to-MJCF_Demo/01_manual_control.py          # MuJoCo 查看器手动控制
+python demos/01-CAD-to-MJCF_Demo/02_sequence_demo.py --interactive  # 12 预设动作自动播放
+python -m electronbot_sim.interactive                           # 键盘交互控制
+python -m electronbot_benchmark.run --tasks all --episodes 10   # 基准测试
+```
